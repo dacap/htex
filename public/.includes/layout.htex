@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <title>htex - hypertext extruder</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/nord.min.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+  </head>
+  <body>
+    <header class="container">
+      <nav>
+        <ul>
+          <li><strong><a href="/">htex</a> // hypertext extruder</strong></li>
+        </ul>
+        <ul>
+          <li><a href="/">home</a></li>
+          <li><a href="/demos/">demos</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main class="container">
+      <!content>
+    </main>
+    <footer class="container" style="text-align:center;border-top:var(--pico-border-width) solid var(--pico-form-element-border-color);">
+      <em>by <a href="https://github.com/dacap">dacap</a> // made in 🇦🇷</em>
+    </footer>
+    <script>hljs.highlightAll();</script>
+  </body>
+</html>

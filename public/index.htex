@@ -1,0 +1,5 @@
+<!layout /.includes/layout.htex>
+<article>
+  <p>An experimental web server &amp; HTML-like programming language to generate hypertext.</p>
+  <pre><code><!include-escaped .includes/index-example.htex></code></pre>
+</article>

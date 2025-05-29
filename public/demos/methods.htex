@@ -1,0 +1,31 @@
+<!layout /.includes/layout.htex>
+<article>
+  <h2>methods demo</h2>
+  <!method get>    received GET method
+  <!method post>   received POST method (form input: <code>"<!data name>"</code>)
+  <!method put>    received PUT method (form input: <code>"<!data name>"</code>)
+  <!method patch>  received PATCH method (form input: <code>"<!data name>"</code>)
+  <!method delete> received DELETE method
+  <!method any>
+  <hr>
+  <ul>
+    <li>
+      <a href="#" hx-target="body" hx-get=".">get</a> /
+      <a href="#" hx-target="body" hx-delete=".">delete</a>
+    </li>
+    <li>
+      <form action="." method="post">
+        <p>
+          <a href="#" hx-target="body" hx-post=".">post</a> /
+          <a href="#" hx-target="body" hx-put=".">put</a> /
+          <a href="#" hx-target="body" hx-patch=".">patch</a>
+        </p>
+        <input autofocus name="name" value="<!data name>" placeholder="form input" />
+      </form>
+    </li>
+  </ul>
+</article>
+<article>
+  <code>methods.htex</code> source file, using <a href="https://htmx.org">htmx</a> library to generate HTTP requests with other methods:
+  <pre><code class="language-html"><!include-escaped methods.htex></code></pre>
+</article>

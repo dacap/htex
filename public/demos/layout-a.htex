@@ -1,0 +1,14 @@
+<!layout /.includes/layout.htex>
+<article>
+  <h2>layout a</h2>
+  <ul>
+	<li><a href="/demos/layout-a/">/demos/layout-a/</a>
+	<li><a href="/demos/layout-b/">/demos/layout-b/</a>
+	<li><a href="/demos/layouts/">/demos/layouts/</a>
+  </ul>
+</article>
+<!content>
+<article>
+  <code>layout-a.htex</code> source file:
+  <pre><code class="language-html"><!include-escaped layout-a.htex></code></pre>
+</article>

@@ -1,0 +1,8 @@
+<!layout layout-b.htex>
+<article>
+  <h4>layouts demo</h4>
+</article>
+<article>
+  <code>layouts.htex</code> source file:
+  <pre><code class="language-html"><!include-escaped layouts.htex></code></pre>
+</article>

@@ -1,0 +1,11 @@
+<body>
+<!method get>
+  <form action="." method="post">
+    <input type="email" name="email" placeholder="email">
+    <input type="password" name="password" placeholder="password">
+    <button type="submit">sign in</button>
+  </form>
+<!method post>
+  Form received: <!data email>
+<!method any>
+</body>

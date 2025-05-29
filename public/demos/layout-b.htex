@@ -1,0 +1,9 @@
+<!layout layout-a.htex>
+<article>
+  <h3>layout b</h3>
+</article>
+<!content>
+<article>
+  <code>layout-b.htex</code> source file:
+  <pre><code class="language-html"><!include-escaped layout-b.htex></code></pre>
+</article>
