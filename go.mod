@@ -1,3 +1,3 @@
-module github.com/dacap/htex
+module htex.dev
 
 go 1.24

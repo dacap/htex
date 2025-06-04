@@ -2,7 +2,7 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE.txt file.
 
-package main
+package htex
 
 import (
 	"log"
@@ -29,7 +29,7 @@ func (w *logResponseWriter) WriteHeader(statusCode int) {
 }
 
 type LogHtexHandler struct {
-	handler HtexHandler
+	handler http.Handler
 	w       logResponseWriter
 }
 

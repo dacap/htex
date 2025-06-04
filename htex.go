@@ -2,12 +2,11 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE.txt file.
 
-package main
+package htex
 
 import (
 	"bufio"
 	"bytes"
-	"flag"
 	"fmt"
 	"html"
 	"log"
@@ -17,9 +16,6 @@ import (
 	"path/filepath"
 	"strings"
 )
-
-var localRoot string
-var verbose bool
 
 type ElemKind int
 
@@ -44,7 +40,7 @@ type HtexFile struct {
 	layout *HtexFile
 }
 
-func SplitHtexTokens() func([]byte, bool) (int, []byte, error) {
+func splitHtexTokens() func([]byte, bool) (int, []byte, error) {
 	insideHtexElem := false
 	closingHtexElem := false
 	return func(data []byte, atEOF bool) (int, []byte, error) {
@@ -95,19 +91,25 @@ func SplitHtexTokens() func([]byte, bool) (int, []byte, error) {
 	}
 }
 
+type Htex struct {
+	localRoot   string
+	verbose     bool
+	HttpHandler http.Handler
+}
+
 // relativeTo is a path to the current local filename that is being
 // processed (so relative URLs will be relative to the directory of
 // this file)
-func SolveUrlPathToLocalPath(relativeTo string, urlPath string) string {
+func (h *Htex) solveUrlPathToLocalPath(relativeTo string, urlPath string) string {
 	if urlPath[0] == '/' {
-		return path.Join(localRoot, urlPath)
+		return path.Join(h.localRoot, urlPath)
 	} else {
 		return path.Join(path.Dir(relativeTo), urlPath)
 	}
 }
 
-func ParseHtexFile(r *http.Request, fn string) *HtexFile {
-	if verbose {
+func (h *Htex) parseHtexFile(r *http.Request, fn string) *HtexFile {
+	if h.verbose {
 		log.Println(" -> parse file", fn)
 	}
 
@@ -122,7 +124,7 @@ func ParseHtexFile(r *http.Request, fn string) *HtexFile {
 	insideHtexElem := false
 	var tok string
 	scanner := bufio.NewScanner(file)
-	scanner.Split(SplitHtexTokens())
+	scanner.Split(splitHtexTokens())
 	for scanner.Scan() {
 		elem := Elem{ElemNone, ""}
 		tok = scanner.Text()
@@ -134,8 +136,8 @@ func ParseHtexFile(r *http.Request, fn string) *HtexFile {
 				insideHtexElem = true
 				if strings.HasPrefix(tok, "<!layout") {
 					scanner.Scan()
-					layoutFn := SolveUrlPathToLocalPath(fn, scanner.Text())
-					layout := ParseHtexFile(r, layoutFn)
+					layoutFn := h.solveUrlPathToLocalPath(fn, scanner.Text())
+					layout := h.parseHtexFile(r, layoutFn)
 					if layout != nil {
 						htexFile.layout = layout
 					}
@@ -175,10 +177,12 @@ func ParseHtexFile(r *http.Request, fn string) *HtexFile {
 	return htexFile
 }
 
-func WriteHtexFile(w http.ResponseWriter, r *http.Request, htexFile *HtexFile, layout *HtexFile, content func(http.ResponseWriter, *http.Request)) {
+func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *HtexFile, layout *HtexFile, content func(http.ResponseWriter, *http.Request)) {
 	if layout != nil {
-		WriteHtexFile(w, r, layout, layout.layout,
-			func(w http.ResponseWriter, r *http.Request) { WriteHtexFile(w, r, htexFile, nil, content) })
+		h.writeHtexFile(w, r, layout, layout.layout,
+			func(w http.ResponseWriter, r *http.Request) {
+				h.writeHtexFile(w, r, htexFile, nil, content)
+			})
 		return
 	}
 
@@ -208,7 +212,7 @@ func WriteHtexFile(w http.ResponseWriter, r *http.Request, htexFile *HtexFile, l
 				w.Write([]byte(r.Form[elem.text][0]))
 			}
 		} else if elem.kind == ElemIncludeRaw || elem.kind == ElemIncludeEscaped {
-			fn := SolveUrlPathToLocalPath(htexFile.fn, elem.text)
+			fn := h.solveUrlPathToLocalPath(htexFile.fn, elem.text)
 			content, err := os.ReadFile(fn)
 			if elem.kind == ElemIncludeEscaped {
 				content = []byte(html.EscapeString(string(content)))
@@ -224,16 +228,14 @@ func WriteHtexFile(w http.ResponseWriter, r *http.Request, htexFile *HtexFile, l
 	}
 }
 
-type HtexHandler struct {
-}
-
-func (hh *HtexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *Htex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	verbose := h.verbose
 	url := path.Clean(r.URL.String())
 	if verbose {
 		log.Println(r.RemoteAddr, r.Method, r.URL, url)
 	}
 
-	fn := path.Join(localRoot, url)
+	fn := path.Join(h.localRoot, url)
 	base := path.Base(fn)
 
 	if base == "." {
@@ -278,15 +280,15 @@ func (hh *HtexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	fn = fn + ".htex"
 	s, _ = os.Stat(fn)
 	if s != nil && s.Mode().IsRegular() {
-		h := w.Header()
-		h.Set("Content-Type", "text/html; charset=utf-8")
-		if verbose {
+		hdr := w.Header()
+		hdr.Set("Content-Type", "text/html; charset=utf-8")
+		if h.verbose {
 			log.Println(" -> dynamic file", fn)
 		}
-		htexFile := ParseHtexFile(r, fn)
+		htexFile := h.parseHtexFile(r, fn)
 		if htexFile != nil {
 			r.ParseForm()
-			WriteHtexFile(w, r, htexFile, htexFile.layout, nil)
+			h.writeHtexFile(w, r, htexFile, htexFile.layout, nil)
 		}
 		return
 	}
@@ -294,31 +296,10 @@ func (hh *HtexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-func main() {
-	var fullchain, privkey string
-	var port int
-	flag.BoolVar(&verbose, "verbose", false, "verbose output")
-	flag.StringVar(&fullchain, "fullchain", "", "TLS certificate")
-	flag.StringVar(&privkey, "privkey", "", "private key for the TLS certificate")
-	flag.IntVar(&port, "port", 0, "port to listen (80 or 443 by default)")
-	flag.Parse()
-	n := len(flag.Args())
-	if n > 0 {
-		localRoot, _ = filepath.Abs(flag.Args()[0])
-	} else {
-		localRoot, _ = filepath.Abs("public")
-	}
-
-	s, err := os.Stat(localRoot)
+func (h *Htex) RunWebServer(port int, fullchain string, privkey string) {
+	s, err := os.Stat(h.localRoot)
 	if err != nil || s == nil || !s.Mode().IsDir() {
-		log.Fatalln("cannot open directory:", localRoot)
-	}
-
-	var handler http.Handler
-	if verbose {
-		handler = &LogHtexHandler{}
-	} else {
-		handler = &HtexHandler{}
+		log.Fatalln("cannot open directory:", h.localRoot)
 	}
 
 	if fullchain != "" && privkey != "" {
@@ -326,15 +307,25 @@ func main() {
 		if port == 0 {
 			port = 443
 		}
-		log.Printf("htex server running https://localhost:%d\n -> local dir %s\n", port, localRoot)
+		fmt.Printf("htex server at https://localhost:%d for %s\n", port, h.localRoot)
 		log.Fatal(http.ListenAndServeTLS(
-			fmt.Sprint(":", port), fullchain, privkey, handler))
+			fmt.Sprint(":", port), fullchain, privkey, h.HttpHandler))
 	} else {
 		// Start HTTP server
 		if port == 0 {
 			port = 80
 		}
-		log.Printf("htex server running https://localhost:%d\n -> local dir %s\n", port, localRoot)
-		log.Fatal(http.ListenAndServe(fmt.Sprint(":", port), handler))
+		fmt.Printf("htex server at http://localhost:%d for %s\n", port, h.localRoot)
+		log.Fatal(http.ListenAndServe(fmt.Sprint(":", port), h.HttpHandler))
 	}
+}
+
+func NewHtex(localRoot string, verbose bool) *Htex {
+	h := &Htex{localRoot, verbose, nil}
+	if verbose {
+		h.HttpHandler = &LogHtexHandler{handler: h}
+	} else {
+		h.HttpHandler = h
+	}
+	return h
 }
