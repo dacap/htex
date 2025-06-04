@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 )
 
@@ -108,7 +107,7 @@ func (h *Htex) solveUrlPathToLocalPath(relativeTo string, urlPath string) string
 	}
 }
 
-func (h *Htex) parseHtexFile(r *http.Request, fn string) *HtexFile {
+func (h *Htex) parseHtexFile(w http.ResponseWriter, r *http.Request, fn string) (*HtexFile, error) {
 	if h.verbose {
 		log.Println(" -> parse file", fn)
 	}
@@ -116,7 +115,7 @@ func (h *Htex) parseHtexFile(r *http.Request, fn string) *HtexFile {
 	file, err := os.Open(fn)
 	if err != nil {
 		log.Println(err)
-		return nil
+		return nil, err
 	}
 	defer file.Close()
 
@@ -137,9 +136,12 @@ func (h *Htex) parseHtexFile(r *http.Request, fn string) *HtexFile {
 				if strings.HasPrefix(tok, "<!layout") {
 					scanner.Scan()
 					layoutFn := h.solveUrlPathToLocalPath(fn, scanner.Text())
-					layout := h.parseHtexFile(r, layoutFn)
+					layout, err := h.parseHtexFile(w, r, layoutFn)
 					if layout != nil {
 						htexFile.layout = layout
+					} else if err != nil {
+						http.Error(w, "500 internal error", http.StatusInternalServerError)
+						return nil, err
 					}
 				} else if tok == "<!content" {
 					elem = Elem{ElemContent, tok}
@@ -174,7 +176,7 @@ func (h *Htex) parseHtexFile(r *http.Request, fn string) *HtexFile {
 			htexFile.elems = append(htexFile.elems, elem)
 		}
 	}
-	return htexFile
+	return htexFile, nil
 }
 
 func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *HtexFile, layout *HtexFile, content func(http.ResponseWriter, *http.Request)) {
@@ -285,7 +287,7 @@ func (h *Htex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if h.verbose {
 			log.Println(" -> dynamic file", fn)
 		}
-		htexFile := h.parseHtexFile(r, fn)
+		htexFile, _ := h.parseHtexFile(w, r, fn)
 		if htexFile != nil {
 			r.ParseForm()
 			h.writeHtexFile(w, r, htexFile, htexFile.layout, nil)
