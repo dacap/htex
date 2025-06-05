@@ -4,25 +4,39 @@
 
 ## introduction
 
-An experimental web server & HTML-like programming language to generate hypertext.
+An experimental tool which is:
+
+* an HTML-extension to generate hypertext (new set of `<!elements>`),
+* a web server to publish static and dynamic content (`htex server`),
+* a static site generator like jekyll or hugo (`htex gen`).
 
 ## quick start
 
-You can `go build` and execute `./htex` to run a local server
-(http://localhost:80) for the [`public` folder](public/) content.
+Clone htex repository
 
-You can modify the [`public/index.htex` file](public/index.htex):
+    git clone github.com/dacap/htex
+
+and execute
+
+    cd htex
+    go run ./cmd/htex
+
+to run a local server (http://localhost:80) for the given
+[`public` folder](public/) content.
+
+You can modify the [`./public/index.htex` file](public/index.htex):
 ```html
 <html>
 <body>
-<!method get>
-  <form action="." method="post">
-    <input type="email" name="email" placeholder="email">
-    <input type="password" name="password" placeholder="password">
-    <button type="submit">sign in</button>
-  </form>
-<!method post>
-  Form received: <!data email>
+  <!method get>
+    <form action="." method="post">
+      <input type="email" name="email" placeholder="email">
+      <input type="password" name="password" placeholder="password">
+      <button type="submit">sign in</button>
+    </form>
+  <!method post>
+    Form received: <!data email>
+  <!method any>
 </body>
 </html>
 ```
@@ -39,6 +53,13 @@ code), unless the file is inside the `.well-known` directory, which is
 used for domains/certificate validations.
 
 ## htex elements
+
+* [<!content>](#content)
+* [<!data>](#data-formfield)
+* [<!include-raw>](#include-raw-file)
+* [<!include-escaped>](#include-escaped-file)
+* [<!layout>](#layout-file)
+* [<!method>](#method-httpmethod)
 
 ## <!content>
 

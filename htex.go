@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -101,9 +102,9 @@ type Htex struct {
 // this file)
 func (h *Htex) solveUrlPathToLocalPath(relativeTo string, urlPath string) string {
 	if urlPath[0] == '/' {
-		return path.Join(h.localRoot, urlPath)
+		return filepath.Join(h.localRoot, urlPath)
 	} else {
-		return path.Join(path.Dir(relativeTo), urlPath)
+		return filepath.Join(filepath.Dir(relativeTo), urlPath)
 	}
 }
 
@@ -220,7 +221,7 @@ func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *H
 				content = []byte(html.EscapeString(string(content)))
 			}
 			if err != nil {
-				log.Println(err)
+				log.Print(err)
 			} else {
 				w.Write(content)
 			}
@@ -241,7 +242,7 @@ func (h *Htex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	base := path.Base(fn)
 
 	if base == "." {
-		fn = path.Join(path.Dir(fn), "index")
+		fn = filepath.Join(filepath.Dir(fn), "index")
 	}
 
 	// Ignore requests to access ".htex" files as static content
@@ -279,9 +280,10 @@ func (h *Htex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fn = fn + "/index"
 	}
 
-	fn = fn + ".htex"
-	s, _ = os.Stat(fn)
+	// Dynamic content from .htex file
+	s, _ = os.Stat(fn + ".htex")
 	if s != nil && s.Mode().IsRegular() {
+		fn = fn + ".htex"
 		hdr := w.Header()
 		hdr.Set("Content-Type", "text/html; charset=utf-8")
 		if h.verbose {
@@ -295,6 +297,23 @@ func (h *Htex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Static content from .html file. Generally this is only for
+	// the index.html when we access / or other URL path without
+	// index.html and there is no index.htex first. Any other
+	// static .html file is served with the first http.ServeFile()
+	s, _ = os.Stat(fn + ".html")
+	if s != nil && s.Mode().IsRegular() {
+		fn = fn + ".html"
+		hdr := w.Header()
+		hdr.Set("Content-Type", "text/html; charset=utf-8")
+		if h.verbose {
+			log.Println(" -> static file", fn)
+		}
+		http.ServeFile(w, r, fn)
+		return
+	}
+
+	// 404
 	http.NotFound(w, r)
 }
 
