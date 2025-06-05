@@ -63,8 +63,8 @@ func splitHtexTokens() func([]byte, bool) (int, []byte, error) {
 				}
 			}
 			if data[i] == '<' && data[i+1] == '!' &&
-				(!bytes.Equal(data[i+2:i+9], []byte("DOCTYPE")) ||
-					!bytes.Equal(data[i+2:i+9], []byte("doctype"))) {
+				!bytes.Equal(data[i+2:i+9], []byte("DOCTYPE")) &&
+				!bytes.Equal(data[i+2:i+9], []byte("doctype")) {
 				insideHtexElem = true
 				if i > 0 {
 					return i, data[:i], nil
