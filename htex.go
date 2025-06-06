@@ -40,8 +40,16 @@ type HtexFile struct {
 	layout *HtexFile
 }
 
-func splitHtexTokens() func([]byte, bool) (int, []byte, error) {
+type Htex struct {
+	localRoot    string
+	verbose      bool
+	KeepComments bool
+	HttpHandler  http.Handler
+}
+
+func splitHtexTokens(h *Htex) func([]byte, bool) (int, []byte, error) {
 	insideHtexElem := false
+	insideComment := false
 	closingHtexElem := false
 	return func(data []byte, atEOF bool) (int, []byte, error) {
 		if closingHtexElem {
@@ -62,26 +70,55 @@ func splitHtexTokens() func([]byte, bool) (int, []byte, error) {
 					closingHtexElem = true
 					return i, data[:i], nil
 				}
-			}
-			if data[i] == '<' && data[i+1] == '!' &&
-				!bytes.Equal(data[i+2:i+9], []byte("DOCTYPE")) &&
-				!bytes.Equal(data[i+2:i+9], []byte("doctype")) {
-				insideHtexElem = true
-				if i > 0 {
+			} else if insideComment {
+				// Here h.KeepComments is always false, as if we keep
+				// comments it will be part of a ElemText, not a
+				// separated token.
+				if !h.KeepComments {
+					insideComment = false
+					for ; i+3 < len(data) &&
+						(data[i] != '-' || data[i+1] != '-' || data[i+2] != '>'); i++ {
+					}
+					i += 3
 					return i, data[:i], nil
 				}
-				var j int
-				k := len(data)
-				for j = 0; j < len(data); j++ {
-					if data[j] == ' ' {
-						k = j + 1
-						break
-					} else if data[j] == '>' {
-						k = j
-						break
+			}
+			if i+2 < len(data) && data[i] == '<' && data[i+1] == '!' &&
+				!bytes.EqualFold(data[i+2:i+9], []byte("doctype")) {
+
+				// Starting HTML comment "<!--"...
+				if data[i+2] == '-' && data[i+3] == '-' {
+					// If we're going to keep comments, we just pass
+					// the whole comment and make it part of the next
+					// ElemText token.
+					if h.KeepComments {
+						for ; i+3 < len(data) &&
+							(data[i] != '-' || data[i+1] != '-' || data[i+2] != '>'); i++ {
+						}
+						i += 2
+					} else {
+						insideComment = true
+						return i, data[:i], nil
 					}
+				} else {
+					// <!htex-tag...
+					insideHtexElem = true
+					if i > 0 {
+						return i, data[:i], nil
+					}
+					var j int
+					k := len(data)
+					for j = 0; j < len(data); j++ {
+						if data[j] == ' ' {
+							k = j + 1
+							break
+						} else if data[j] == '>' {
+							k = j
+							break
+						}
+					}
+					return k, data[i:j], nil
 				}
-				return k, data[i:j], nil
 			}
 		}
 		if !atEOF {
@@ -89,12 +126,6 @@ func splitHtexTokens() func([]byte, bool) (int, []byte, error) {
 		}
 		return 0, data, bufio.ErrFinalToken
 	}
-}
-
-type Htex struct {
-	localRoot   string
-	verbose     bool
-	HttpHandler http.Handler
 }
 
 // relativeTo is a path to the current local filename that is being
@@ -120,21 +151,26 @@ func (h *Htex) parseHtexFile(w http.ResponseWriter, r *http.Request, fn string) 
 	}
 	defer file.Close()
 
+	scanner := bufio.NewScanner(file)
+	return h.parseHtexScanner(w, r, fn, scanner)
+}
+
+func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn string, scanner *bufio.Scanner) (*HtexFile, error) {
 	htexFile := &HtexFile{fn: fn}
 	insideHtexElem := false
 	var tok string
-	scanner := bufio.NewScanner(file)
-	scanner.Split(splitHtexTokens())
+	scanner.Split(splitHtexTokens(h))
 	for scanner.Scan() {
 		elem := Elem{ElemNone, ""}
 		tok = scanner.Text()
 		if len(tok) > 2 && tok[0] == '<' && tok[1] == '!' {
-			if strings.HasPrefix(tok, "<!DOCTYPE") ||
-				strings.HasPrefix(tok, "<!doctype") {
+			lowerTok := strings.ToLower(tok)
+			if strings.HasPrefix(lowerTok, "<!doctype") ||
+				(h.KeepComments && strings.HasPrefix(tok, "<!--")) {
 				elem = Elem{ElemText, tok}
 			} else {
 				insideHtexElem = true
-				if strings.HasPrefix(tok, "<!layout") {
+				if strings.HasPrefix(lowerTok, "<!layout") {
 					scanner.Scan()
 					layoutFn := h.solveUrlPathToLocalPath(fn, scanner.Text())
 					layout, err := h.parseHtexFile(w, r, layoutFn)
@@ -144,24 +180,27 @@ func (h *Htex) parseHtexFile(w http.ResponseWriter, r *http.Request, fn string) 
 						http.Error(w, "500 internal error", http.StatusInternalServerError)
 						return nil, err
 					}
-				} else if tok == "<!content" {
+				} else if lowerTok == "<!content" {
 					elem = Elem{ElemContent, tok}
-				} else if tok == "<!data" {
+				} else if lowerTok == "<!data" {
 					scanner.Scan()
 					paramName := scanner.Text()
 					elem = Elem{ElemData, paramName}
-				} else if tok == "<!method" {
+				} else if lowerTok == "<!method" {
 					scanner.Scan()
 					methodName := scanner.Text()
 					elem = Elem{ElemMethod, strings.ToLower(methodName)}
-				} else if tok == "<!include-raw" {
+				} else if lowerTok == "<!include-raw" {
 					scanner.Scan()
 					includeFn := scanner.Text()
 					elem = Elem{ElemIncludeRaw, includeFn}
-				} else if tok == "<!include-escaped" {
+				} else if lowerTok == "<!include-escaped" {
 					scanner.Scan()
 					includeFn := scanner.Text()
 					elem = Elem{ElemIncludeEscaped, includeFn}
+				} else if strings.HasPrefix(tok, "<!--") {
+					// Ignore the whole comment token (which includes "<!-- ... -->")
+					insideHtexElem = false
 				} else {
 					log.Println("invalid htex element", tok)
 				}
@@ -170,7 +209,7 @@ func (h *Htex) parseHtexFile(w http.ResponseWriter, r *http.Request, fn string) 
 			if tok == ">" {
 				insideHtexElem = false
 			}
-		} else {
+		} else if tok != "" {
 			elem = Elem{ElemText, tok}
 		}
 		if elem.kind != ElemNone {
@@ -342,7 +381,12 @@ func (h *Htex) RunWebServer(port int, fullchain string, privkey string) {
 }
 
 func NewHtex(localRoot string, verbose bool) *Htex {
-	h := &Htex{localRoot, verbose, nil}
+	h := &Htex{
+		localRoot:    localRoot,
+		verbose:      verbose,
+		KeepComments: false,
+		HttpHandler:  nil,
+	}
 	if verbose {
 		h.HttpHandler = &LogHtexHandler{handler: h}
 	} else {
