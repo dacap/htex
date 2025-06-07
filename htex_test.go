@@ -32,17 +32,20 @@ func (w *memoryResponseWriter) WriteHeader(statusCode int) {
 }
 
 type ParseTest struct {
+	reqStr   string
 	text     string
 	expected string
 	elems    []ElemKind
 }
 
 func testParsing(h *Htex, t *testing.T, tests []ParseTest) {
-	r := &http.Request{Method: "GET"}
-	r.URL = &url.URL{}
-
 	for _, test := range tests {
 		w := &memoryResponseWriter{}
+
+		method, urlPath, _ := strings.Cut(test.reqStr, " ")
+		r := &http.Request{Method: method}
+		r.URL, _ = url.ParseRequestURI(urlPath)
+
 		s := bufio.NewScanner(strings.NewReader(test.text))
 		hf, err := h.parseHtexScanner(w, r, "test.htex", s)
 		if err != nil {
@@ -79,11 +82,13 @@ func testParsing(h *Htex, t *testing.T, tests []ParseTest) {
 func TestBasic(t *testing.T) {
 	tests := []ParseTest{
 		{
+			"GET /",
 			"",
 			"",
 			[]ElemKind{},
 		},
 		{
+			"GET /",
 			"a",
 			"a",
 			[]ElemKind{ElemText},
@@ -96,36 +101,43 @@ func TestBasic(t *testing.T) {
 func TestSkipComments(t *testing.T) {
 	tests := []ParseTest{
 		{
+			"GET /",
 			"a<!-->b",
 			"ab",
 			[]ElemKind{ElemText, ElemText},
 		},
 		{
+			"GET /",
 			"a<!--",
 			"a",
 			[]ElemKind{ElemText},
 		},
 		{
+			"GET /",
 			"a<!--->b",
 			"ab",
 			[]ElemKind{ElemText, ElemText},
 		},
 		{
+			"GET /",
 			"a<!---->b",
 			"ab",
 			[]ElemKind{ElemText, ElemText},
 		},
 		{
+			"GET /",
 			"a<!-- c -->b",
 			"ab",
 			[]ElemKind{ElemText, ElemText},
 		},
 		{
+			"GET /",
 			"abc<!-- c -->",
 			"abc",
 			[]ElemKind{ElemText},
 		},
 		{
+			"GET /",
 			"abcd<!-- c --",
 			"abcd",
 			[]ElemKind{ElemText},
@@ -138,21 +150,25 @@ func TestSkipComments(t *testing.T) {
 func TestKeepComments(t *testing.T) {
 	tests := []ParseTest{
 		{
+			"GET /",
 			"a<!-->b",
 			"a<!-->b",
 			[]ElemKind{ElemText},
 		},
 		{
+			"GET /",
 			"a<!-- c -->b",
 			"a<!-- c -->b",
 			[]ElemKind{ElemText},
 		},
 		{
+			"GET /",
 			"abc<!-- c -->",
 			"abc<!-- c -->",
 			[]ElemKind{ElemText},
 		},
 		{
+			"GET /",
 			"abcd<!-- c --",
 			"abcd<!-- c --",
 			[]ElemKind{ElemText},
@@ -166,16 +182,19 @@ func TestKeepComments(t *testing.T) {
 func TestDocType(t *testing.T) {
 	tests := []ParseTest{
 		{
+			"GET /",
 			"<!doctype html>",
 			"<!doctype html>",
 			[]ElemKind{ElemText},
 		},
 		{
+			"GET /",
 			"a<!DOCTYPE html>b<!DocType html>c",
 			"a<!DOCTYPE html>b<!DocType html>c",
 			[]ElemKind{ElemText},
 		},
 		{
+			"GET /",
 			"a<!doctype html",
 			"a<!doctype html",
 			[]ElemKind{ElemText},
@@ -188,14 +207,59 @@ func TestDocType(t *testing.T) {
 func TestData(t *testing.T) {
 	tests := []ParseTest{
 		{
+			"GET /",
 			"a<!data x>b",
 			"ab",
 			[]ElemKind{ElemText, ElemData, ElemText},
 		},
 		{
+			"GET /",
 			"a<!data x>b<!data y>c",
 			"abc",
 			[]ElemKind{ElemText, ElemData, ElemText, ElemData, ElemText},
+		},
+	}
+	h := NewHtex(".", false)
+	testParsing(h, t, tests)
+}
+
+func TestMethodGet(t *testing.T) {
+	tests := []ParseTest{
+		{
+			"GET /",
+			"a<!method>b",
+			"a",
+			[]ElemKind{ElemText, ElemMethod, ElemText},
+		},
+		{
+			"GET /",
+			"a<!method any>b",
+			"ab",
+			[]ElemKind{ElemText, ElemMethod, ElemText},
+		},
+		{
+			"GET /",
+			"a<!method get>b<!method post>c",
+			"ab",
+			[]ElemKind{ElemText, ElemMethod, ElemText, ElemMethod, ElemText},
+		},
+		{
+			"GET /",
+			"a<!method get id>id",
+			"a",
+			[]ElemKind{ElemText, ElemMethod, ElemText},
+		},
+		{
+			"GET /?id=42",
+			"a,<!method get id>id=<!query id>",
+			"a,id=42",
+			[]ElemKind{ElemText, ElemMethod, ElemText, ElemQuery},
+		},
+		{
+			"GET /?user=david&pass=abc",
+			"<!query user>,<!query pass>",
+			"david,abc",
+			[]ElemKind{ElemQuery, ElemText, ElemQuery},
 		},
 	}
 	h := NewHtex(".", false)

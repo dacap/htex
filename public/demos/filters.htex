@@ -1,0 +1,24 @@
+<!layout /.includes/layout.htex>
+<article>
+  <h2>method filters demo</h2>
+  <!method get>received GET method
+  <!method get ok>with ok query
+  <!method get id>with id (id=<!query id>)
+    <!method get id=1>(one)
+    <!method get id=2>(two)
+  <!method any>
+  <hr>
+  <ul>
+    <li><a href="#" hx-target="body" hx-get=".">get</a></li>
+    <li><a href="#" hx-target="body" hx-get="?ok">get?ok</a></li>
+    <li>
+      <a href="#" hx-target="body" hx-get="?id">get?id</a> /
+      <a href="#" hx-target="body" hx-get="?id=1">get?id=1</a> /
+      <a href="#" hx-target="body" hx-get="?id=2">get?id=2</a>
+    </li>
+  </ul>
+</article>
+<article>
+  <code>filters.htex</code> source file, using <a href="https://htmx.org">htmx</a> library to generate HTTP requests with other methods:
+  <pre><code class="language-html"><!include-escaped filters.htex></code></pre>
+</article>

@@ -11,6 +11,7 @@ import (
 	"html"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -25,13 +26,15 @@ const (
 	ElemContent
 	ElemMethod
 	ElemData
+	ElemQuery
 	ElemIncludeRaw
 	ElemIncludeEscaped
 )
 
 type Elem struct {
-	kind ElemKind
-	text string
+	kind   ElemKind
+	text   string
+	values *url.Values
 }
 
 type HtexFile struct {
@@ -59,12 +62,13 @@ func splitHtexTokens(h *Htex) func([]byte, bool) (int, []byte, error) {
 		for i := 0; i < len(data); i++ {
 			if insideHtexElem {
 				if data[i] == ' ' || data[i] == '\r' || data[i] == '\n' {
+					var j = i
 					for ; i < len(data) &&
 						(data[i] == ' ' ||
 							data[i] == '\r' ||
 							data[i] == '\n'); i++ {
 					}
-					return i, data[:i], nil
+					return i, data[:j], nil
 				} else if data[i] == '>' {
 					insideHtexElem = false
 					closingHtexElem = true
@@ -113,6 +117,7 @@ func splitHtexTokens(h *Htex) func([]byte, bool) (int, []byte, error) {
 							k = j + 1
 							break
 						} else if data[j] == '>' {
+							closingHtexElem = true
 							k = j
 							break
 						}
@@ -160,18 +165,35 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 	insideHtexElem := false
 	var tok string
 	scanner.Split(splitHtexTokens(h))
-	for scanner.Scan() {
-		elem := Elem{ElemNone, ""}
+
+	nextToken := true
+	for true {
+		if nextToken {
+			if !scanner.Scan() {
+				break
+			}
+		} else {
+			nextToken = true
+		}
+
+		elem := Elem{ElemNone, "", nil}
 		tok = scanner.Text()
 		if len(tok) > 2 && tok[0] == '<' && tok[1] == '!' {
 			lowerTok := strings.ToLower(tok)
 			if strings.HasPrefix(lowerTok, "<!doctype") ||
 				(h.KeepComments && strings.HasPrefix(tok, "<!--")) {
-				elem = Elem{ElemText, tok}
+				elem = Elem{ElemText, tok, nil}
 			} else {
 				insideHtexElem = true
 				if strings.HasPrefix(lowerTok, "<!layout") {
-					scanner.Scan()
+					if !scanner.Scan() {
+						break
+					}
+					if scanner.Text() == ">" {
+						nextToken = false
+						continue
+					}
+
 					layoutFn := h.solveUrlPathToLocalPath(fn, scanner.Text())
 					layout, err := h.parseHtexFile(w, r, layoutFn)
 					if layout != nil {
@@ -181,23 +203,70 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 						return nil, err
 					}
 				} else if lowerTok == "<!content" {
-					elem = Elem{ElemContent, tok}
+					elem = Elem{ElemContent, tok, nil}
 				} else if lowerTok == "<!data" {
-					scanner.Scan()
+					if !scanner.Scan() {
+						break
+					}
+					if scanner.Text() == ">" {
+						nextToken = false
+						continue
+					}
 					paramName := scanner.Text()
-					elem = Elem{ElemData, paramName}
+					elem = Elem{ElemData, paramName, nil}
+				} else if lowerTok == "<!query" {
+					if !scanner.Scan() {
+						break
+					}
+					if scanner.Text() == ">" {
+						nextToken = false
+						continue
+					}
+					key := scanner.Text()
+					elem = Elem{ElemQuery, key, nil}
 				} else if lowerTok == "<!method" {
-					scanner.Scan()
-					methodName := scanner.Text()
-					elem = Elem{ElemMethod, strings.ToLower(methodName)}
+					var methodName string
+					var values *url.Values
+					values = nil
+
+					if !scanner.Scan() {
+						// At least '>' was expected
+						break
+					}
+
+					if scanner.Text() == ">" {
+						nextToken = false
+					} else {
+						methodName = scanner.Text()
+
+						for scanner.Scan() {
+							nameAndValue := scanner.Text()
+							if nameAndValue == ">" {
+								nextToken = false
+								break
+							}
+							name, value, _ := strings.Cut(nameAndValue, "=")
+							if values == nil {
+								values = &url.Values{}
+							}
+							values.Add(name, value)
+						}
+					}
+					elem = Elem{ElemMethod, strings.ToLower(methodName), values}
 				} else if lowerTok == "<!include-raw" {
-					scanner.Scan()
+					if !scanner.Scan() {
+						break
+					}
+					if scanner.Text() == ">" {
+						nextToken = false
+						continue
+					}
 					includeFn := scanner.Text()
-					elem = Elem{ElemIncludeRaw, includeFn}
+					elem = Elem{ElemIncludeRaw, includeFn, nil}
 				} else if lowerTok == "<!include-escaped" {
 					scanner.Scan()
 					includeFn := scanner.Text()
-					elem = Elem{ElemIncludeEscaped, includeFn}
+					elem = Elem{ElemIncludeEscaped, includeFn, nil}
 				} else if strings.HasPrefix(tok, "<!--") {
 					// Ignore the whole comment token (which includes "<!-- ... -->")
 					insideHtexElem = false
@@ -210,13 +279,28 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 				insideHtexElem = false
 			}
 		} else if tok != "" {
-			elem = Elem{ElemText, tok}
+			elem = Elem{ElemText, tok, nil}
 		}
 		if elem.kind != ElemNone {
 			htexFile.elems = append(htexFile.elems, elem)
 		}
 	}
 	return htexFile, nil
+}
+
+func matchQuery(a *url.Values, b *url.Values) bool {
+	for k, v := range *a {
+		if !b.Has(k) {
+			return false
+		}
+		if len(v) != 0 && v[0] != "" {
+			u := b.Get(k)
+			if u != v[0] {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *HtexFile, layout *HtexFile, content func(http.ResponseWriter, *http.Request)) {
@@ -228,11 +312,14 @@ func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *H
 		return
 	}
 
+	query := r.URL.Query()
+
 	skipUntilNewMethod := false
 	methodName := strings.ToLower(r.Method)
 	for _, elem := range htexFile.elems {
 		if elem.kind == ElemMethod {
-			if elem.text == methodName || elem.text == "any" {
+			if ((elem.text == methodName) && (elem.values == nil || matchQuery(elem.values, &query))) ||
+				elem.text == "any" {
 				skipUntilNewMethod = false
 			} else {
 				skipUntilNewMethod = true
@@ -253,6 +340,10 @@ func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *H
 			if r.Form.Has(elem.text) {
 				w.Write([]byte(r.Form[elem.text][0]))
 			}
+		} else if elem.kind == ElemQuery {
+			if query.Has(elem.text) {
+				w.Write([]byte(query.Get(elem.text)))
+			}
 		} else if elem.kind == ElemIncludeRaw || elem.kind == ElemIncludeEscaped {
 			fn := h.solveUrlPathToLocalPath(htexFile.fn, elem.text)
 			content, err := os.ReadFile(fn)
@@ -272,9 +363,9 @@ func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *H
 
 func (h *Htex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	verbose := h.verbose
-	url := path.Clean(r.URL.String())
+	url := path.Clean(r.URL.Path)
 	if verbose {
-		log.Println(r.RemoteAddr, r.Method, r.URL, url)
+		log.Println(r.RemoteAddr, r.Method, r.URL)
 	}
 
 	fn := path.Join(h.localRoot, url)
