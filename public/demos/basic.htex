@@ -1,0 +1,18 @@
+<!layout /.includes/layout.htex>
+<article>
+  <h2>basic demo</h2>
+  <!method get>
+    <form action="." method="post">
+      <input type="text" name="username" placeholder="username">
+      <input type="password" name="password" placeholder="password">
+      <button type="submit">sign in</button>
+    </form>
+  <!method post>
+    <p>Username <code>"<!data username>"</code></p>
+    <p><a href=".">Go back</a></p>
+  <!method any>
+</article>
+<article>
+  <code>basic.htex</code> source file:
+  <pre><code class="language-html"><!include-escaped basic.htex></code></pre>
+</article>
