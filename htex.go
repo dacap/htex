@@ -16,6 +16,10 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/gomarkdown/markdown"
+	mhtml "github.com/gomarkdown/markdown/html"
+	"github.com/gomarkdown/markdown/parser"
 )
 
 type ElemKind int
@@ -29,6 +33,7 @@ const (
 	ElemQuery
 	ElemIncludeRaw
 	ElemIncludeEscaped
+	ElemIncludeMarkdown
 )
 
 type Elem struct {
@@ -267,6 +272,10 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 					scanner.Scan()
 					includeFn := scanner.Text()
 					elem = Elem{ElemIncludeEscaped, includeFn, nil}
+				} else if lowerTok == "<!include-markdown" {
+					scanner.Scan()
+					includeFn := scanner.Text()
+					elem = Elem{ElemIncludeMarkdown, includeFn, nil}
 				} else if strings.HasPrefix(tok, "<!--") {
 					// Ignore the whole comment token (which includes "<!-- ... -->")
 					insideHtexElem = false
@@ -301,6 +310,16 @@ func matchQuery(a *url.Values, b *url.Values) bool {
 		}
 	}
 	return true
+}
+
+func markdownToHtml(md []byte) []byte {
+	extensions := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
+	p := parser.NewWithExtensions(extensions)
+	doc := p.Parse(md)
+	htmlFlags := mhtml.CommonFlags | mhtml.HrefTargetBlank
+	opts := mhtml.RendererOptions{Flags: htmlFlags}
+	renderer := mhtml.NewRenderer(opts)
+	return markdown.Render(doc, renderer)
 }
 
 func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *HtexFile, layout *HtexFile, content func(http.ResponseWriter, *http.Request)) {
@@ -344,12 +363,18 @@ func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *H
 			if query.Has(elem.text) {
 				w.Write([]byte(query.Get(elem.text)))
 			}
-		} else if elem.kind == ElemIncludeRaw || elem.kind == ElemIncludeEscaped {
+		} else if elem.kind == ElemIncludeRaw ||
+			elem.kind == ElemIncludeEscaped ||
+			elem.kind == ElemIncludeMarkdown {
+
 			fn := h.solveUrlPathToLocalPath(htexFile.fn, elem.text)
 			content, err := os.ReadFile(fn)
 			if elem.kind == ElemIncludeEscaped {
 				content = []byte(html.EscapeString(string(content)))
+			} else if elem.kind == ElemIncludeMarkdown {
+				content = markdownToHtml(content)
 			}
+
 			if err != nil {
 				log.Print(err)
 			} else {

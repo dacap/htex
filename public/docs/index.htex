@@ -1,0 +1,4 @@
+<!layout /.includes/layout.htex>
+<article>
+  <!include-markdown docs.md>
+</article>

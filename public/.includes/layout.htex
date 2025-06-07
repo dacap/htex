@@ -16,7 +16,9 @@
         </ul>
         <ul>
           <li><a href="/">home</a></li>
+          <li><a href="/docs/">docs</a></li>
           <li><a href="/demos/">demos</a></li>
+          <li><a href="https://github.com/dacap/htex">github</a></li>
         </ul>
       </nav>
     </header>

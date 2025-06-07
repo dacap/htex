@@ -19,7 +19,7 @@ Clone htex repository
 and execute
 
     cd htex
-    go run ./cmd/htex
+    go run ./cmd/htex server
 
 to run a local server (http://localhost:80) for the given
 [`public` folder](public/) content.
@@ -52,79 +52,6 @@ Hidden files and directories are not be published (returning 404
 code), unless the file is inside the `.well-known` directory, which is
 used for domains/certificate validations.
 
-## htex elements
+## docs
 
-* [<!content>](#content)
-* [<!data>](#data-formfield)
-* [<!include-raw>](#include-raw-file)
-* [<!include-escaped>](#include-escaped-file)
-* [<!layout>](#layout-file)
-* [<!method>](#method-httpmethod)
-
-## <!content>
-
-Can be used inside a layout to insert the page content in some place
-inside the layout template. If the layout is accessed directly, this
-is replaced with just an empty string.
-
-## <!data formfield>
-
-It's replaced with the value of the given `formfield`.
-
-## <!include-raw file>
-
-Includes the content of the given `file` in the output just as it is,
-i.e. without processing it.
-
-## <!include-escaped file>
-
-Includes the content of the given `file` in the output escaping the
-HTML characters, e.g. useful to show the source code of a file.
-
-## <!layout file>
-
-Specify the layout related to the current `.htex` file. This is
-generally specified at the top of the file.
-
-Example for a `layout.htex` file:
-```html
-<html>
-  <body>
-    <!content>
-  </body>
-</html>
-```
-and `index.htex` file:
-```html
-<!layout layout.htex>
-<p>Hello World</p>
-```
-the output will be:
-```html
-<html>
-  <body>
-    <p>Hello World</p>
-  </body>
-</html>
-```
-
-## <!method httpmethod>
-
-Filters content depending on the current method in the HTTP request,
-all the following elements will be ignored until a new `<!method>` is
-found.
-
-You can use `<!method any>` to go back to content that will be
-displayed in any case.
-
-Example:
-```html
-<body>
-we are processing the
-<!method get>    GET method
-<!method post>   POST method
-<!method put>    PUT method
-<!method delete> DELETE method
-<!method any>
-</body>
-```
+Go to [public/docs/docs/](public/docs/docs.md).

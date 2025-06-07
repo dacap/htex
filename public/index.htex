@@ -1,5 +1,10 @@
 <!layout /.includes/layout.htex>
 <article>
-  <p>An experimental web server &amp; HTML-like programming language to generate hypertext.</p>
+  <p>An experimental tool which is:</p>
+  <ul>
+	<li>an HTML-extension to generate hypertext (new set of <code>&lt;!elements&gt;</code>),</li>
+	<li>a web server to publish static and dynamic content (<code>htex server</code>),
+	<li>a static site generator like jekyll or hugo (<code>htex gen</code>).
+  </ul>
   <pre><code><!include-escaped .includes/index-example.htex></code></pre>
 </article>
