@@ -1,0 +1,16 @@
+<!layout /.includes/layout.htex>
+<article>
+  <h2>wildcard route demo</h2>
+  <form id="form" action="." method="get" onsubmit="return false;">
+    <input id="path" type="text" name="path" placeholder="path" value="/demos/wildcard/write_your_path_here">
+    <button type="submit" onclick="window.location.href=document.getElementById('path').value;">go to path</button>
+  </form>
+</article>
+<article>
+  <code>wildcard.htex</code> source file:
+  <pre><code class="language-html"><!include-escaped index.htex></code></pre>
+</article>
+<article>
+  <code>_.htex</code> source file that receives all other routes in <code>/demos/wildcard/</code>:
+  <pre><code class="language-html"><!include-escaped _.htex></code></pre>
+</article>

@@ -1,0 +1,12 @@
+<!layout /.includes/layout.htex>
+<article>
+  <h2>wildcard route demo (_.htex handler)</h2>
+  <p>handling <code><!url></code> path</p>
+  <form id="form" action="/demos/wildcard/" method="post">
+    <button type="submit">go back</button>
+  </form>
+</article>
+<article>
+  <code>wildcard.htex</code> source file:
+  <pre><code class="language-html"><!include-escaped _.htex></code></pre>
+</article>

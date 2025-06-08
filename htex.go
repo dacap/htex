@@ -28,6 +28,7 @@ const (
 	ElemNone ElemKind = iota
 	ElemText
 	ElemContent
+	ElemUrl
 	ElemMethod
 	ElemData
 	ElemQuery
@@ -209,6 +210,8 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 					}
 				} else if lowerTok == "<!content" {
 					elem = Elem{ElemContent, tok, nil}
+				} else if lowerTok == "<!url" {
+					elem = Elem{ElemUrl, "", nil}
 				} else if lowerTok == "<!data" {
 					if !scanner.Scan() {
 						break
@@ -355,6 +358,8 @@ func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *H
 				// URL. This is an accepted behavior, and we replace
 				// <!content> element with nothing.
 			}
+		} else if elem.kind == ElemUrl {
+			w.Write([]byte(path.Clean(r.URL.Path)))
 		} else if elem.kind == ElemData {
 			if r.Form.Has(elem.text) {
 				w.Write([]byte(r.Form[elem.text][0]))
@@ -439,6 +444,25 @@ func (h *Htex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s, _ = os.Stat(fn + ".htex")
 	if s != nil && s.Mode().IsRegular() {
 		fn = fn + ".htex"
+		hdr := w.Header()
+		hdr.Set("Content-Type", "text/html; charset=utf-8")
+		if h.verbose {
+			log.Println(" -> dynamic file", fn)
+		}
+		htexFile, _ := h.parseHtexFile(w, r, fn)
+		if htexFile != nil {
+			r.ParseForm()
+			h.writeHtexFile(w, r, htexFile, htexFile.layout, nil)
+		}
+		return
+	}
+
+	// Wildcard handler from "_.htex" file
+	fnDir, _ := filepath.Split(fn)
+	wildcardFn := filepath.Join(fnDir, "_.htex")
+	s, _ = os.Stat(wildcardFn)
+	if s != nil && s.Mode().IsRegular() {
+		fn = wildcardFn
 		hdr := w.Header()
 		hdr.Set("Content-Type", "text/html; charset=utf-8")
 		if h.verbose {
