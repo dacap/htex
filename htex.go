@@ -167,7 +167,7 @@ func (h *Htex) parseHtexFile(w http.ResponseWriter, r *http.Request, fn string) 
 }
 
 func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn string, scanner *bufio.Scanner) (*HtexFile, error) {
-	htexFile := &HtexFile{fn: fn}
+	hf := &HtexFile{fn: fn}
 	insideHtexElem := false
 	var tok string
 	scanner.Split(splitHtexTokens(h))
@@ -203,7 +203,7 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 					layoutFn := h.solveUrlPathToLocalPath(fn, scanner.Text())
 					layout, err := h.parseHtexFile(w, r, layoutFn)
 					if layout != nil {
-						htexFile.layout = layout
+						hf.layout = layout
 					} else if err != nil {
 						http.Error(w, "500 internal error", http.StatusInternalServerError)
 						return nil, err
@@ -294,10 +294,10 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 			elem = Elem{ElemText, tok, nil}
 		}
 		if elem.kind != ElemNone {
-			htexFile.elems = append(htexFile.elems, elem)
+			hf.elems = append(hf.elems, elem)
 		}
 	}
-	return htexFile, nil
+	return hf, nil
 }
 
 func matchQuery(a *url.Values, b *url.Values) bool {
@@ -325,11 +325,11 @@ func markdownToHtml(md []byte) []byte {
 	return markdown.Render(doc, renderer)
 }
 
-func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *HtexFile, layout *HtexFile, content func(http.ResponseWriter, *http.Request)) {
+func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, hf *HtexFile, layout *HtexFile, content func(http.ResponseWriter, *http.Request)) {
 	if layout != nil {
 		h.writeHtexFile(w, r, layout, layout.layout,
 			func(w http.ResponseWriter, r *http.Request) {
-				h.writeHtexFile(w, r, htexFile, nil, content)
+				h.writeHtexFile(w, r, hf, nil, content)
 			})
 		return
 	}
@@ -338,7 +338,7 @@ func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *H
 
 	skipUntilNewMethod := false
 	methodName := strings.ToLower(r.Method)
-	for _, elem := range htexFile.elems {
+	for _, elem := range hf.elems {
 		if elem.kind == ElemMethod {
 			if ((elem.text == methodName) && (elem.values == nil || matchQuery(elem.values, &query))) ||
 				elem.text == "any" {
@@ -372,7 +372,7 @@ func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, htexFile *H
 			elem.kind == ElemIncludeEscaped ||
 			elem.kind == ElemIncludeMarkdown {
 
-			fn := h.solveUrlPathToLocalPath(htexFile.fn, elem.text)
+			fn := h.solveUrlPathToLocalPath(hf.fn, elem.text)
 			content, err := os.ReadFile(fn)
 			if elem.kind == ElemIncludeEscaped {
 				content = []byte(html.EscapeString(string(content)))
@@ -449,10 +449,10 @@ func (h *Htex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if h.verbose {
 			log.Println(" -> dynamic file", fn)
 		}
-		htexFile, _ := h.parseHtexFile(w, r, fn)
-		if htexFile != nil {
+		hf, _ := h.parseHtexFile(w, r, fn)
+		if hf != nil {
 			r.ParseForm()
-			h.writeHtexFile(w, r, htexFile, htexFile.layout, nil)
+			h.writeHtexFile(w, r, hf, hf.layout, nil)
 		}
 		return
 	}
@@ -468,10 +468,10 @@ func (h *Htex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if h.verbose {
 			log.Println(" -> dynamic file", fn)
 		}
-		htexFile, _ := h.parseHtexFile(w, r, fn)
-		if htexFile != nil {
+		hf, _ := h.parseHtexFile(w, r, fn)
+		if hf != nil {
 			r.ParseForm()
-			h.writeHtexFile(w, r, htexFile, htexFile.layout, nil)
+			h.writeHtexFile(w, r, hf, hf.layout, nil)
 		}
 		return
 	}
