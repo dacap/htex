@@ -10,9 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
 )
 
 type pseudoResponseWriter struct {
@@ -42,39 +40,18 @@ func (w *pseudoResponseWriter) WriteHeader(statusCode int) {
 }
 
 func (h *Htex) GenerateStaticContent(outputDir string) {
-	filepath.Walk(h.localRoot, func(fullFn string, info os.FileInfo, err error) error {
-		fn := filepath.ToSlash(fullFn[len(h.localRoot):])
-
-		// Skip hidden files folders
-		if info.IsDir() {
-			if strings.HasPrefix(fn, "/.") &&
-				!strings.HasPrefix(fn, "/.well-known") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		var query string
-		ext := path.Ext(fn)
-		var outputFn string
-		if ext == ".htex" {
-			// Convert the filename into a URL pattern
-			query = "/" + fn[:len(fn)-len(ext)]
-			queryLen := len(query)
-			if queryLen >= 6 && query[queryLen-6:] == "/index" {
-				query = query[0 : queryLen-5]
-			}
-			outputFn = filepath.Join(outputDir, query, "index.html")
-		} else {
-			outputFn = filepath.Join(outputDir, fn)
-		}
-
+	mkDirs := func(fullFn, outputFn string) {
 		// Print generated file
 		fmt.Println(fullFn, "->", outputFn)
-
 		os.MkdirAll(filepath.Dir(outputFn), os.ModePerm)
+	}
 
-		if ext == ".htex" {
+	h.ScanFiles(
+		// Dynamic content
+		func(fullFn, query string) {
+			outputFn := filepath.Join(outputDir, query, "index.html")
+			mkDirs(fullFn, outputFn)
+
 			// Emulate a GET request to the .htex file to generate its content.
 			w := &pseudoResponseWriter{outputFn, nil, http.Header{}}
 			r := &http.Request{Method: "GET"}
@@ -86,14 +63,17 @@ func (h *Htex) GenerateStaticContent(outputDir string) {
 			} else {
 				h.writeHtexFile(w, r, hf, hf.layout, nil)
 			}
-		} else {
+		},
+		// Static content
+		func(fullFn, fn string) {
+			outputFn := filepath.Join(outputDir, fn)
+			mkDirs(fullFn, outputFn)
+
 			content, err := os.ReadFile(fullFn)
 			if err != nil {
 				log.Print(err)
 			} else {
 				os.WriteFile(outputFn, content, 0666)
 			}
-		}
-		return nil
-	})
+		})
 }
