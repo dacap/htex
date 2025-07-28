@@ -10,6 +10,7 @@
 * [<!layout>](#layout-file)
 * [<!method>](#method-httpmethod)
 * [<!query>](#query-key)
+* [<!url>](#url)
 
 #### <!content>
 
@@ -98,12 +99,24 @@ we are processing the
 
 #### <!query key>
 
-It's replaced with the value of the given `key` from the URL
-query. E.g. If we access `/path/?id=2` in the following example
+It's replaced with value of the given `key` from the URL
+query or the full raw query in case the `key` is not specified.
+E.g. If we access `/path/?id=2` in the following example
 ```html
 user ID is <!query id>
 ```
 we get
 ```html
 user ID is 2
+```
+
+#### <!url>
+
+It's replaced with the URL path. E.g. If we access `/path/?id=2` in the following example
+```html
+your are accessing <code><!url></code>
+```
+we get
+```html
+your are accessing <code>/path/</code>
 ```

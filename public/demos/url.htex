@@ -1,0 +1,14 @@
+<!layout /.includes/layout.htex>
+<article>
+  <h2>url demo</h2>
+  <ul>
+    <li><code>&lt;!url&gt</code> <!url>
+    <li><code>&lt;!query&gt</code> <!query>
+    <li><code>&lt;!query action&gt</code> <!query action>
+    <li><code>&lt;!query id&gt</code> <!query id>
+  </ul>
+</article>
+<article>
+  <code>url.htex</code> source file:
+  <pre><code class="language-html"><!include-escaped url.htex></code></pre>
+</article>

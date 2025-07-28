@@ -226,11 +226,12 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 					if !scanner.Scan() {
 						break
 					}
+					var key string
 					if scanner.Text() == ">" {
 						nextToken = false
-						continue
+					} else {
+						key = scanner.Text()
 					}
-					key := scanner.Text()
 					elem = Elem{ElemQuery, key, nil}
 				} else if lowerTok == "<!method" {
 					var methodName string
@@ -365,8 +366,12 @@ func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, hf *HtexFil
 				w.Write([]byte(r.Form[elem.text][0]))
 			}
 		} else if elem.kind == ElemQuery {
-			if query.Has(elem.text) {
-				w.Write([]byte(query.Get(elem.text)))
+			if len(elem.text) > 0 {
+				if query.Has(elem.text) {
+					w.Write([]byte(query.Get(elem.text)))
+				}
+			} else {
+				w.Write([]byte(r.URL.RawQuery))
 			}
 		} else if elem.kind == ElemIncludeRaw ||
 			elem.kind == ElemIncludeEscaped ||
