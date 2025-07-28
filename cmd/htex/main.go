@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"htex.dev"
+	"github.com/dacap/htex"
 )
 
 var defUsage func()
