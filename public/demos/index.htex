@@ -7,6 +7,7 @@
     <li><a href="/demos/methods/">methods</a>
     <li><a href="/demos/filters/">method filters</a>
     <li><a href="/demos/url/?action=show&id=32">url</a>
+    <li><a href="/demos/vars/">vars</a>
     <li><a href="/demos/wildcard/">wildcard route</a>
   </ul>
 </article>

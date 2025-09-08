@@ -4,12 +4,14 @@
 
 * [<!content>](#content)
 * [<!data>](#data-formfield)
+* [<!get>](#get-variable)
 * [<!include-escaped>](#include-escaped-file)
 * [<!include-markdown>](#include-markdown-file)
 * [<!include-raw>](#include-raw-file)
 * [<!layout>](#layout-file)
 * [<!method>](#method-httpmethod)
 * [<!query>](#query-key)
+* [<!set>](#set-variable-value)
 * [<!url>](#url)
 
 #### <!content>
@@ -21,6 +23,11 @@ is replaced with just an empty string.
 #### <!data formfield>
 
 It's replaced with the value of the given `formfield`.
+
+#### <!get variable>
+
+Prints current value of the given variable or just an empty string if
+such variable doesn't exist.
 
 #### <!include-escaped file>
 
@@ -109,6 +116,10 @@ we get
 ```html
 user ID is 2
 ```
+
+#### <!set variable value>
+
+Sets the value of the given value in the current scope/file.
 
 #### <!url>
 

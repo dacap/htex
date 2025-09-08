@@ -28,6 +28,8 @@ const (
 	ElemNone ElemKind = iota
 	ElemText
 	ElemContent
+	ElemGet // <!get varname>
+	ElemSet // <!set varname value>
 	ElemUrl
 	ElemMethod
 	ElemData
@@ -209,7 +211,31 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 						return nil, err
 					}
 				} else if lowerTok == "<!content" {
-					elem = Elem{ElemContent, tok, nil}
+					elem = Elem{ElemContent, "", nil}
+				} else if lowerTok == "<!get" {
+					if !scanner.Scan() {
+						break
+					}
+					varName := scanner.Text()
+					elem = Elem{ElemGet, varName, nil}
+				} else if lowerTok == "<!set" {
+					if !scanner.Scan() {
+						break
+					}
+					varName := scanner.Text()
+					var values *url.Values = nil
+					for scanner.Scan() {
+						value := scanner.Text()
+						if value == ">" {
+							nextToken = false
+							break
+						}
+						if values == nil {
+							values = &url.Values{}
+						}
+						values.Add(varName, value)
+					}
+					elem = Elem{ElemSet, varName, values}
 				} else if lowerTok == "<!url" {
 					elem = Elem{ElemUrl, "", nil}
 				} else if lowerTok == "<!data" {
@@ -235,8 +261,7 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 					elem = Elem{ElemQuery, key, nil}
 				} else if lowerTok == "<!method" {
 					var methodName string
-					var values *url.Values
-					values = nil
+					var values *url.Values = nil
 
 					if !scanner.Scan() {
 						// At least '>' was expected
@@ -336,6 +361,7 @@ func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, hf *HtexFil
 	}
 
 	query := r.URL.Query()
+	vars := make(map[string]string)
 
 	skipUntilNewMethod := false
 	methodName := strings.ToLower(r.Method)
@@ -358,6 +384,17 @@ func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, hf *HtexFil
 				// happen if we access the layout directly from the
 				// URL. This is an accepted behavior, and we replace
 				// <!content> element with nothing.
+			}
+		} else if elem.kind == ElemGet {
+			value, exist := vars[elem.text]
+			if exist {
+				w.Write([]byte(value))
+			}
+		} else if elem.kind == ElemSet {
+			if elem.values != nil {
+				vars[elem.text] = (*elem.values)[elem.text][0]
+			} else {
+				delete(vars, elem.text)
 			}
 		} else if elem.kind == ElemUrl {
 			w.Write([]byte(path.Clean(r.URL.Path)))

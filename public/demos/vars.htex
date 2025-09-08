@@ -1,0 +1,12 @@
+<!layout /.includes/layout.htex>
+<article>
+  <h2>vars demo</h2>
+  <ul>
+    <li>Code: <code>&lt;!set world htex&gt;hello &lt;!get world&gt;</code>
+    <li>Result: <code><!set world htex>hello <!get world></code>
+  </ul>
+</article>
+<article>
+  <code>vars.htex</code> source file:
+  <pre><code class="language-html"><!include-escaped vars.htex></code></pre>
+</article>

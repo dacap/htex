@@ -265,3 +265,28 @@ func TestMethodGet(t *testing.T) {
 	h := NewHtex(".", false)
 	testParsing(h, t, tests)
 }
+
+func TestVars(t *testing.T) {
+	tests := []ParseTest{
+		{
+			"GET /",
+			"a<!set a b><!get a>",
+			"ab",
+			[]ElemKind{ElemText, ElemSet, ElemGet},
+		},
+		{
+			"GET /",
+			"a<!set a b><!get a><!set a><!get a>",
+			"ab",
+			[]ElemKind{ElemText, ElemSet, ElemGet, ElemSet, ElemGet},
+		},
+		{
+			"GET /",
+			"a<!set a b><!get a><!set b c><!get b><!get a><!set a c><!get a>",
+			"abcbc",
+			[]ElemKind{ElemText, ElemSet, ElemGet, ElemSet, ElemGet, ElemGet, ElemSet, ElemGet},
+		},
+	}
+	h := NewHtex(".", false)
+	testParsing(h, t, tests)
+}
