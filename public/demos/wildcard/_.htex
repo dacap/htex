@@ -7,6 +7,6 @@
   </form>
 </article>
 <article>
-  <code>wildcard.htex</code> source file:
+  <code>wildcard/_.htex</code> source file:
   <pre><code class="language-html"><!include-escaped _.htex></code></pre>
 </article>

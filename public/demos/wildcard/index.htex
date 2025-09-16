@@ -7,10 +7,10 @@
   </form>
 </article>
 <article>
-  <code>wildcard.htex</code> source file:
+  <code>wildcard/index.htex</code> source file:
   <pre><code class="language-html"><!include-escaped index.htex></code></pre>
 </article>
 <article>
-  <code>_.htex</code> source file that receives all other routes in <code>/demos/wildcard/</code>:
+  <code>wildcard/_.htex</code> source file that receives all other routes in <code>/demos/wildcard/</code>:
   <pre><code class="language-html"><!include-escaped _.htex></code></pre>
 </article>
