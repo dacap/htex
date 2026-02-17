@@ -51,11 +51,14 @@ type HtexFile struct {
 	layout *HtexFile
 }
 
+type LayoutResolver func(string) *bufio.Scanner
+
 type Htex struct {
-	localRoot    string
-	verbose      bool
-	KeepComments bool
-	HttpHandler  http.Handler
+	localRoot      string
+	verbose        bool
+	KeepComments   bool
+	HttpHandler    http.Handler
+	LayoutResolver LayoutResolver
 }
 
 func splitHtexTokens(h *Htex) func([]byte, bool) (int, []byte, error) {
@@ -168,6 +171,26 @@ func (h *Htex) parseHtexFile(w http.ResponseWriter, r *http.Request, fn string) 
 	return h.parseHtexScanner(w, r, fn, scanner)
 }
 
+func (h *Htex) parseHtexLayoutFile(w http.ResponseWriter, r *http.Request, fn string) (*HtexFile, error) {
+	if h.verbose {
+		log.Println(" -> parse layout file", fn)
+	}
+	var scanner *bufio.Scanner = nil
+	if h.LayoutResolver != nil {
+		scanner = h.LayoutResolver(fn)
+	}
+	if scanner == nil {
+		file, err := os.Open(fn)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		defer file.Close()
+		scanner = bufio.NewScanner(file)
+	}
+	return h.parseHtexScanner(w, r, fn, scanner)
+}
+
 func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn string, scanner *bufio.Scanner) (*HtexFile, error) {
 	hf := &HtexFile{fn: fn}
 	insideHtexElem := false
@@ -203,10 +226,11 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 					}
 
 					layoutFn := h.solveUrlPathToLocalPath(fn, scanner.Text())
-					layout, err := h.parseHtexFile(w, r, layoutFn)
+					layout, err := h.parseHtexLayoutFile(w, r, layoutFn)
 					if layout != nil {
 						hf.layout = layout
 					} else if err != nil {
+						log.Println("layout not found:", fn)
 						http.Error(w, "500 internal error", http.StatusInternalServerError)
 						return nil, err
 					}
@@ -564,10 +588,11 @@ func (h *Htex) RunWebServer(port int, fullchain string, privkey string) {
 
 func NewHtex(localRoot string, verbose bool) *Htex {
 	h := &Htex{
-		localRoot:    localRoot,
-		verbose:      verbose,
-		KeepComments: false,
-		HttpHandler:  nil,
+		localRoot:      localRoot,
+		verbose:        verbose,
+		KeepComments:   false,
+		HttpHandler:    nil,
+		LayoutResolver: nil,
 	}
 	if verbose {
 		h.HttpHandler = &LogHtexHandler{handler: h}

@@ -71,7 +71,7 @@ func testParsing(h *Htex, t *testing.T, tests []ParseTest) {
 			}
 		}
 
-		h.writeHtexFile(w, r, hf, nil, nil)
+		h.writeHtexFile(w, r, hf, hf.layout, nil)
 		result := w.buf.String()
 		if result != test.expected {
 			t.Errorf("parsing '%s' => '%s' (expected '%s')\n", test.text, result, test.expected)
@@ -288,5 +288,39 @@ func TestVars(t *testing.T) {
 		},
 	}
 	h := NewHtex(".", false)
+	testParsing(h, t, tests)
+}
+
+func TestLayouts(t *testing.T) {
+	tests := []ParseTest{
+		{
+			"GET /",
+			"hi",
+			"hi",
+			[]ElemKind{ElemText},
+		},
+		{
+			"GET /",
+			"<!layout htmlwrap>hi",
+			"<html>hi</html>",
+			[]ElemKind{ElemText},
+		},
+		{
+			"GET /",
+			"<!layout bodywrap>hi",
+			"<html><body>hi</body></html>",
+			[]ElemKind{ElemText},
+		},
+	}
+	h := NewHtex(".", false)
+	h.LayoutResolver = func(layoutFn string) *bufio.Scanner {
+		if layoutFn == "htmlwrap" {
+			return bufio.NewScanner(strings.NewReader("<html><!content></html>"))
+		} else if layoutFn == "bodywrap" {
+			return bufio.NewScanner(strings.NewReader("<!layout htmlwrap><body><!content></body>"))
+		} else {
+			return nil
+		}
+	}
 	testParsing(h, t, tests)
 }
