@@ -13,5 +13,5 @@
   <pre><code><!include-escaped .includes/index-example.htex></code></pre>
 </article>
 <article>
-  <!include-markdown .includes/status.htex>
+  <!include-markdown .includes/status.md>
 </article>
