@@ -1,4 +1,4 @@
-// Copyright 2025 David Capello. All rights reserved.
+// Copyright (c) David Capello. All rights reserved.
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE.txt file.
 
