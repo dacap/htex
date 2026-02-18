@@ -71,7 +71,7 @@ func testParsing(h *Htex, t *testing.T, tests []ParseTest) {
 			}
 		}
 
-		h.writeHtexFile(w, r, hf, hf.layout, nil)
+		h.writeHtexFile(w, r, hf, nil)
 		result := w.buf.String()
 		if result != test.expected {
 			t.Errorf("parsing '%s' => '%s' (expected '%s')\n", test.text, result, test.expected)
@@ -293,23 +293,51 @@ func TestVars(t *testing.T) {
 
 func TestLayouts(t *testing.T) {
 	tests := []ParseTest{
-		{
-			"GET /",
-			"hi",
-			"hi",
-			[]ElemKind{ElemText},
-		},
+		// Single layout
 		{
 			"GET /",
 			"<!layout htmlwrap>hi",
 			"<html>hi</html>",
-			[]ElemKind{ElemText},
+			[]ElemKind{ElemLayout, ElemText},
 		},
+		// Double-layout
 		{
 			"GET /",
 			"<!layout bodywrap>hi",
 			"<html><body>hi</body></html>",
-			[]ElemKind{ElemText},
+			[]ElemKind{ElemLayout, ElemText},
+		},
+		// <!layout> for GET method but POST without layout
+		{
+			"GET /",
+			"<!method get><!layout htmlwrap>from get" +
+				"<!method post>from post",
+			"<html>from get</html>",
+			[]ElemKind{ElemMethod, ElemLayout, ElemText, ElemMethod, ElemText},
+		},
+		{
+			"POST /",
+			"<!method get><!layout htmlwrap>from get" +
+				"<!method post>from post",
+			"from post",
+			[]ElemKind{ElemMethod, ElemLayout, ElemText, ElemMethod, ElemText},
+		},
+		// Default <!layout> and GET method overwrites the layout
+		{
+			"GET /",
+			"<!layout htmlwrap>" +
+				"<!method get><!layout bodywrap>from get" +
+				"<!method post>from post",
+			"<html><body>from get</body></html>",
+			[]ElemKind{ElemLayout, ElemMethod, ElemLayout, ElemText, ElemMethod, ElemText},
+		},
+		{
+			"POST /",
+			"<!layout htmlwrap>" +
+				"<!method get><!layout bodywrap>from get" +
+				"<!method post>from post",
+			"<html>from post</html>",
+			[]ElemKind{ElemLayout, ElemMethod, ElemLayout, ElemText, ElemMethod, ElemText},
 		},
 	}
 	h := NewHtex(".", false)

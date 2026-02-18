@@ -32,6 +32,7 @@ const (
 	ElemSet // <!set varname value>
 	ElemUrl
 	ElemMethod
+	ElemLayout
 	ElemData
 	ElemQuery
 	ElemIncludeRaw
@@ -46,9 +47,8 @@ type Elem struct {
 }
 
 type HtexFile struct {
-	fn     string
-	elems  []Elem
-	layout *HtexFile
+	fn    string
+	elems []Elem
 }
 
 type LayoutResolver func(string) *bufio.Scanner
@@ -226,14 +226,7 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 					}
 
 					layoutFn := h.solveUrlPathToLocalPath(fn, scanner.Text())
-					layout, err := h.parseHtexLayoutFile(w, r, layoutFn)
-					if layout != nil {
-						hf.layout = layout
-					} else if err != nil {
-						log.Println("layout not found:", fn)
-						http.Error(w, "500 internal error", http.StatusInternalServerError)
-						return nil, err
-					}
+					elem = Elem{ElemLayout, layoutFn, nil}
 				} else if lowerTok == "<!content" {
 					elem = Elem{ElemContent, "", nil}
 				} else if lowerTok == "<!get" {
@@ -375,20 +368,50 @@ func markdownToHtml(md []byte) []byte {
 	return markdown.Render(doc, renderer)
 }
 
-func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, hf *HtexFile, layout *HtexFile, content func(http.ResponseWriter, *http.Request)) {
+func (h *Htex) writeHtexFile0(w http.ResponseWriter, r *http.Request, hf *HtexFile, content func(http.ResponseWriter, *http.Request), searchLayout bool) {
+	methodName := strings.ToLower(r.Method)
+	query := r.URL.Query()
+
+	// Find the layout that matches the HTTP method/query the most
+	var layout *HtexFile = nil
+	skipUntilNewMethod := false
+	if searchLayout {
+		for _, elem := range hf.elems {
+			if elem.kind == ElemMethod {
+				if ((elem.text == methodName) && (elem.values == nil || matchQuery(elem.values, &query))) ||
+					elem.text == "any" {
+					skipUntilNewMethod = false
+				} else {
+					skipUntilNewMethod = true
+					continue
+				}
+			} else if skipUntilNewMethod {
+				continue
+			} else if elem.kind == ElemLayout {
+				layoutFn := elem.text
+				var err error
+				layout, err = h.parseHtexLayoutFile(w, r, layoutFn)
+				if err != nil {
+					log.Println("layout not found:", hf.fn)
+					http.Error(w, "500 internal error", http.StatusInternalServerError)
+					return
+				}
+			} else {
+				// TODO what to do with ElemGet/ElemSet?
+			}
+		}
+	}
+
 	if layout != nil {
-		h.writeHtexFile(w, r, layout, layout.layout,
+		h.writeHtexFile(w, r, layout,
 			func(w http.ResponseWriter, r *http.Request) {
-				h.writeHtexFile(w, r, hf, nil, content)
+				h.writeHtexFile0(w, r, hf, content, false)
 			})
 		return
 	}
 
-	query := r.URL.Query()
 	vars := make(map[string]string)
-
-	skipUntilNewMethod := false
-	methodName := strings.ToLower(r.Method)
+	skipUntilNewMethod = false
 	for _, elem := range hf.elems {
 		if elem.kind == ElemMethod {
 			if ((elem.text == methodName) && (elem.values == nil || matchQuery(elem.values, &query))) ||
@@ -457,6 +480,10 @@ func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, hf *HtexFil
 	}
 }
 
+func (h *Htex) writeHtexFile(w http.ResponseWriter, r *http.Request, hf *HtexFile, content func(http.ResponseWriter, *http.Request)) {
+	h.writeHtexFile0(w, r, hf, content, true)
+}
+
 func (h *Htex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	verbose := h.verbose
 	url := path.Clean(r.URL.Path)
@@ -518,7 +545,7 @@ func (h *Htex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hf, _ := h.parseHtexFile(w, r, fn)
 		if hf != nil {
 			r.ParseForm()
-			h.writeHtexFile(w, r, hf, hf.layout, nil)
+			h.writeHtexFile(w, r, hf, nil)
 		}
 		return
 	}
@@ -537,7 +564,7 @@ func (h *Htex) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hf, _ := h.parseHtexFile(w, r, fn)
 		if hf != nil {
 			r.ParseForm()
-			h.writeHtexFile(w, r, hf, hf.layout, nil)
+			h.writeHtexFile(w, r, hf, nil)
 		}
 		return
 	}

@@ -1,0 +1,14 @@
+<!method get>
+  <!layout /.includes/layout.htex>
+  <article>
+    <h2>method layouts demo</h2>
+    <p>here GET is handled with a default layout, and POST returns just a regular message (without layout):
+    <p><a href=".">reset (GET)</a> // <a href="#" hx-target="#result" hx-post=".">click here to POST</a></p>
+    <p>result: <code id="result">[text will be received here]</code></p>
+  </article>
+  <article>
+    <code>method-layouts.htex</code> source file, using <a href="https://htmx.org">htmx</a> library to generate a POST HTTP request:
+    <pre><code class="language-html"><!include-escaped method-layouts.htex></code></pre>
+  </article>
+<!method post>
+  <strong>response from POST method (without layout)</strong>

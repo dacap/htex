@@ -61,7 +61,7 @@ func (h *Htex) GenerateStaticContent(outputDir string) {
 			if err != nil {
 				log.Print(err)
 			} else {
-				h.writeHtexFile(w, r, hf, hf.layout, nil)
+				h.writeHtexFile(w, r, hf, nil)
 			}
 		},
 		// Static content
