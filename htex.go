@@ -6,7 +6,6 @@ package htex
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"html"
 	"log"
@@ -63,89 +62,6 @@ type Htex struct {
 	LayoutResolver LayoutResolver
 }
 
-func splitHtexTokens(h *Htex) func([]byte, bool) (int, []byte, error) {
-	insideHtexElem := false
-	insideComment := false
-	closingHtexElem := false
-	return func(data []byte, atEOF bool) (int, []byte, error) {
-		if closingHtexElem {
-			closingHtexElem = false
-			return 1, data[0:1], nil
-		}
-		for i := 0; i < len(data); i++ {
-			if insideHtexElem {
-				if data[i] == ' ' || data[i] == '\r' || data[i] == '\n' {
-					var j = i
-					for ; i < len(data) &&
-						(data[i] == ' ' ||
-							data[i] == '\r' ||
-							data[i] == '\n'); i++ {
-					}
-					return i, data[:j], nil
-				} else if data[i] == '>' {
-					insideHtexElem = false
-					closingHtexElem = true
-					return i, data[:i], nil
-				}
-			} else if insideComment {
-				// Here h.KeepComments is always false, as if we keep
-				// comments it will be part of a ElemText, not a
-				// separated token.
-				if !h.KeepComments {
-					insideComment = false
-					for ; i+3 < len(data) &&
-						(data[i] != '-' || data[i+1] != '-' || data[i+2] != '>'); i++ {
-					}
-					i += 3
-					return i, data[:i], nil
-				}
-			}
-			if i+2 < len(data) && data[i] == '<' && data[i+1] == '!' &&
-				!bytes.EqualFold(data[i+2:i+9], []byte("doctype")) {
-
-				// Starting HTML comment "<!--"...
-				if data[i+2] == '-' && data[i+3] == '-' {
-					// If we're going to keep comments, we just pass
-					// the whole comment and make it part of the next
-					// ElemText token.
-					if h.KeepComments {
-						for ; i+3 < len(data) &&
-							(data[i] != '-' || data[i+1] != '-' || data[i+2] != '>'); i++ {
-						}
-						i += 2
-					} else {
-						insideComment = true
-						return i, data[:i], nil
-					}
-				} else {
-					// <!htex-tag...
-					insideHtexElem = true
-					if i > 0 {
-						return i, data[:i], nil
-					}
-					var j int
-					k := len(data)
-					for j = 0; j < len(data); j++ {
-						if data[j] == ' ' {
-							k = j + 1
-							break
-						} else if data[j] == '>' {
-							closingHtexElem = true
-							k = j
-							break
-						}
-					}
-					return k, data[i:j], nil
-				}
-			}
-		}
-		if !atEOF {
-			return 0, nil, nil
-		}
-		return 0, data, bufio.ErrFinalToken
-	}
-}
-
 // relativeTo is a path to the current local filename that is being
 // processed (so relative URLs will be relative to the directory of
 // this file)
@@ -194,167 +110,175 @@ func (h *Htex) parseHtexLayoutFile(w http.ResponseWriter, r *http.Request, fn st
 }
 
 func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn string, scanner *bufio.Scanner) (*HtexFile, error) {
-	hf := &HtexFile{fn: fn}
-	insideHtexElem := false
-	var tok string
-	scanner.Split(splitHtexTokens(h))
+	lexer := NewLexer()
+	lexer.KeepComments = h.KeepComments
+	tokens, err := lexer.lexScanner(fn, scanner)
+	if err != nil {
+		return nil, err
+	}
 
-	nextToken := true
-	for true {
-		if nextToken {
-			if !scanner.Scan() {
-				break
-			}
-		} else {
-			nextToken = true
+	i := -1
+	n := len(tokens.tokens)
+	var token Token
+
+	nextTok := func() Tok {
+		if i+1 < n {
+			return tokens.tokens[i+1].kind
 		}
+		return TokEof
+	}
 
+	advance := func() {
+		i++
+		if i < n {
+			token = tokens.tokens[i]
+		} else {
+			token = Token{TokEof, ""}
+		}
+	}
+
+	expectTok := func(expected Tok) error {
+		if nextTok() == expected {
+			advance()
+			return nil
+		}
+		return fmt.Errorf("expected token %v not found, %v found", expected, nextTok())
+	}
+
+	hf := &HtexFile{fn: fn}
+	advance()
+	for i < n {
 		elem := Elem{ElemNone, "", nil}
-		tok = scanner.Text()
-		if len(tok) > 2 && tok[0] == '<' && tok[1] == '!' {
-			lowerTok := strings.ToLower(tok)
-			if strings.HasPrefix(lowerTok, "<!doctype") ||
-				(h.KeepComments && strings.HasPrefix(tok, "<!--")) {
-				elem = Elem{ElemText, tok, nil}
-			} else {
-				insideHtexElem = true
-				if strings.HasPrefix(lowerTok, "<!layout") {
-					if !scanner.Scan() {
-						break
-					}
-					if scanner.Text() == ">" {
-						nextToken = false
-						continue
-					}
 
-					layoutFn := h.solveUrlPathToLocalPath(fn, scanner.Text())
-					elem = Elem{ElemLayout, layoutFn, nil}
-				} else if lowerTok == "<!content" {
-					elem = Elem{ElemContent, "", nil}
-				} else if lowerTok == "<!get" {
-					if !scanner.Scan() {
-						break
+		switch token.kind {
+		case TokText:
+			elem = Elem{ElemText, token.text, nil}
+			break
+		case TokElemBegin:
+			t := strings.ToLower(token.text[2:])
+
+			if strings.HasPrefix(t, "layout") {
+				err := expectTok(TokText)
+				if err != nil {
+					return hf, err
+				}
+
+				layoutFn := h.solveUrlPathToLocalPath(fn, token.text)
+				elem = Elem{ElemLayout, layoutFn, nil}
+			} else if t == "content" {
+				elem = Elem{ElemContent, "", nil}
+			} else if t == "get" {
+				err := expectTok(TokText)
+				if err != nil {
+					return hf, err
+				}
+
+				varName := token.text
+				elem = Elem{ElemGet, varName, nil}
+			} else if t == "set" {
+				err := expectTok(TokText)
+				if err != nil {
+					return hf, err
+				}
+
+				varName := token.text
+				var values *url.Values = nil
+				advance()
+				for token.kind == TokText {
+					value := token.text
+					if values == nil {
+						values = &url.Values{}
 					}
-					varName := scanner.Text()
-					elem = Elem{ElemGet, varName, nil}
-				} else if lowerTok == "<!set" {
-					if !scanner.Scan() {
-						break
-					}
-					varName := scanner.Text()
-					var values *url.Values = nil
-					for scanner.Scan() {
-						value := scanner.Text()
-						if value == ">" {
-							nextToken = false
-							break
-						}
+					values.Add(varName, value)
+					advance()
+				}
+				elem = Elem{ElemSet, varName, values}
+			} else if t == "url" {
+				elem = Elem{ElemUrl, "", nil}
+			} else if t == "data" {
+				err := expectTok(TokText)
+				if err != nil {
+					return hf, err
+				}
+
+				paramName := token.text
+				elem = Elem{ElemData, paramName, nil}
+			} else if t == "query" {
+				var key string
+				if nextTok() == TokText {
+					advance()
+					key = token.text
+				}
+				elem = Elem{ElemQuery, key, nil}
+			} else if t == "exec" {
+				err := expectTok(TokText)
+				if err != nil {
+					return hf, err
+				}
+				command := token.text
+				advance()
+				for token.kind == TokText {
+					value := token.text
+					command += " " + value
+					advance()
+				}
+				elem = Elem{ElemExec, command, nil}
+			} else if t == "method" {
+				var methodName string
+				var values *url.Values = nil
+				if nextTok() == TokText {
+					advance()
+					methodName = strings.ToLower(token.text)
+					advance()
+					for token.kind == TokText {
+						nameAndValue := token.text
+						name, value, _ := strings.Cut(nameAndValue, "=")
 						if values == nil {
 							values = &url.Values{}
 						}
-						values.Add(varName, value)
+						values.Add(name, value)
+						advance()
 					}
-					elem = Elem{ElemSet, varName, values}
-				} else if lowerTok == "<!url" {
-					elem = Elem{ElemUrl, "", nil}
-				} else if lowerTok == "<!data" {
-					if !scanner.Scan() {
-						break
-					}
-					if scanner.Text() == ">" {
-						nextToken = false
-						continue
-					}
-					paramName := scanner.Text()
-					elem = Elem{ElemData, paramName, nil}
-				} else if lowerTok == "<!query" {
-					if !scanner.Scan() {
-						break
-					}
-					var key string
-					if scanner.Text() == ">" {
-						nextToken = false
-					} else {
-						key = scanner.Text()
-					}
-					elem = Elem{ElemQuery, key, nil}
-				} else if lowerTok == "<!exec" {
-					if !scanner.Scan() {
-						break
-					}
-					command := scanner.Text()
-					for scanner.Scan() {
-						value := scanner.Text()
-						if value == ">" {
-							nextToken = false
-							break
-						}
-						command += " " + value
-					}
-					elem = Elem{ElemExec, command, nil}
-				} else if lowerTok == "<!method" {
-					var methodName string
-					var values *url.Values = nil
-
-					if !scanner.Scan() {
-						// At least '>' was expected
-						break
-					}
-
-					if scanner.Text() == ">" {
-						nextToken = false
-					} else {
-						methodName = scanner.Text()
-
-						for scanner.Scan() {
-							nameAndValue := scanner.Text()
-							if nameAndValue == ">" {
-								nextToken = false
-								break
-							}
-							name, value, _ := strings.Cut(nameAndValue, "=")
-							if values == nil {
-								values = &url.Values{}
-							}
-							values.Add(name, value)
-						}
-					}
-					elem = Elem{ElemMethod, strings.ToLower(methodName), values}
-				} else if lowerTok == "<!include-raw" {
-					if !scanner.Scan() {
-						break
-					}
-					if scanner.Text() == ">" {
-						nextToken = false
-						continue
-					}
-					includeFn := scanner.Text()
-					elem = Elem{ElemIncludeRaw, includeFn, nil}
-				} else if lowerTok == "<!include-escaped" {
-					scanner.Scan()
-					includeFn := scanner.Text()
-					elem = Elem{ElemIncludeEscaped, includeFn, nil}
-				} else if lowerTok == "<!include-markdown" {
-					scanner.Scan()
-					includeFn := scanner.Text()
-					elem = Elem{ElemIncludeMarkdown, includeFn, nil}
-				} else if strings.HasPrefix(tok, "<!--") {
-					// Ignore the whole comment token (which includes "<!-- ... -->")
-					insideHtexElem = false
-				} else {
-					log.Println("invalid htex element", tok)
 				}
+				elem = Elem{ElemMethod, methodName, values}
+			} else if t == "include-raw" {
+				err := expectTok(TokText)
+				if err != nil {
+					return hf, err
+				}
+
+				includeFn := token.text
+				elem = Elem{ElemIncludeRaw, includeFn, nil}
+			} else if t == "include-escaped" {
+				err := expectTok(TokText)
+				if err != nil {
+					return hf, err
+				}
+
+				includeFn := token.text
+				elem = Elem{ElemIncludeEscaped, includeFn, nil}
+			} else if t == "include-markdown" {
+				err := expectTok(TokText)
+				if err != nil {
+					return hf, err
+				}
+
+				includeFn := token.text
+				elem = Elem{ElemIncludeMarkdown, includeFn, nil}
+			} else {
+				log.Println("invalid htex element", t)
 			}
-		} else if insideHtexElem {
-			if tok == ">" {
-				insideHtexElem = false
+
+			for token.kind != TokElemEnd {
+				advance()
 			}
-		} else if tok != "" {
-			elem = Elem{ElemText, tok, nil}
 		}
+
 		if elem.kind != ElemNone {
 			hf.elems = append(hf.elems, elem)
 		}
+
+		advance()
 	}
 	return hf, nil
 }
