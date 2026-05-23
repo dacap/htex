@@ -9,6 +9,7 @@
     <li><a href="/demos/method-layouts/">method layouts</a>
     <li><a href="/demos/url/?action=show&id=32">url</a>
     <li><a href="/demos/vars/">vars</a>
+    <li><a href="/demos/exec/">exec</a>
     <li><a href="/demos/wildcard/">wildcard route</a>
   </ul>
 </article>

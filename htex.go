@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -35,6 +36,7 @@ const (
 	ElemLayout
 	ElemData
 	ElemQuery
+	ElemExec
 	ElemIncludeRaw
 	ElemIncludeEscaped
 	ElemIncludeMarkdown
@@ -276,6 +278,20 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 						key = scanner.Text()
 					}
 					elem = Elem{ElemQuery, key, nil}
+				} else if lowerTok == "<!exec" {
+					if !scanner.Scan() {
+						break
+					}
+					command := scanner.Text()
+					for scanner.Scan() {
+						value := scanner.Text()
+						if value == ">" {
+							nextToken = false
+							break
+						}
+						command += " " + value
+					}
+					elem = Elem{ElemExec, command, nil}
 				} else if lowerTok == "<!method" {
 					var methodName string
 					var values *url.Values = nil
@@ -456,6 +472,16 @@ func (h *Htex) writeHtexFile0(w http.ResponseWriter, r *http.Request, hf *HtexFi
 				}
 			} else {
 				w.Write([]byte(r.URL.RawQuery))
+			}
+		} else if elem.kind == ElemExec {
+			args := strings.Fields(elem.text)
+			cmd := exec.Command(args[0], args[1:]...)
+			cmd.Dir = h.localRoot
+			out, err := cmd.Output()
+			if err != nil {
+				log.Print(err)
+			} else {
+				w.Write([]byte(html.EscapeString(string(out))))
 			}
 		} else if elem.kind == ElemIncludeRaw ||
 			elem.kind == ElemIncludeEscaped ||

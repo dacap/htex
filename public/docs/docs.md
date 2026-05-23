@@ -4,6 +4,7 @@
 
 * [<!content>](#content)
 * [<!data>](#data-formfield)
+* [<!exec>](#exec-command)
 * [<!get>](#get-variable)
 * [<!include-escaped>](#include-escaped-file)
 * [<!include-markdown>](#include-markdown-file)
@@ -23,6 +24,14 @@ is replaced with just an empty string.
 #### <!data formfield>
 
 It's replaced with the value of the given `formfield`.
+
+#### <!exec command>
+
+Runs the given command (can include params) and prints its output. E.g.
+
+```
+<!exec ls *.txt>
+```
 
 #### <!get variable>
 

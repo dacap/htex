@@ -1,0 +1,11 @@
+<!layout /.includes/layout.htex>
+<article>
+  <h2>exec demo</h2>
+  <p>Running <code>&lt;!exec git log --oneline -10&gt;</code>
+     in <a href="https://github.com/dacap/htex/commits/main/">local repo clone</a>:</p>
+  <pre><code><!exec git log --oneline -10></code></pre>
+</article>
+<article>
+  <code>exec.htex</code> source file:
+  <pre><code class="language-html"><!include-escaped exec.htex></code></pre>
+</article>
