@@ -1,11 +1,12 @@
 ## status
 
-htex is in an *experimental phase*, its API, CLI, and internals might
-change in the future. Its syntax is based on [htmlex](https://github.com/dacap/htmlex),
-and old C tool/HTML extension to generate static sites.
-The way variables (or possibly macros) are get and set
-(e.g. tags like [<!get>](docs/#get-variable) and
-[<!set>](docs/#set-variable-value)) are probably to change in the future.</p>
+[htex](https://github.com/dacap/htex/) is in an *experimental phase*,
+its API, CLI, and internals might change in the future. Its syntax is
+based on [htmlex](https://github.com/dacap/htmlex), and old C
+tool/HTML extension to generate static sites.  The way variables (or
+possibly macros) are get and set (e.g. tags like
+[<!get>](docs/#get-variable) and [<!set>](docs/#set-variable-value))
+are probably to change in the future.</p>
 
 There are some missing parts like:
 

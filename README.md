@@ -4,7 +4,7 @@
 
 ## introduction
 
-An experimental tool which is:
+[htex](https://htex.dev/) is an experimental tool which is:
 
 * an HTML-extension to generate hypertext (new set of `<!elements>`),
 * a web server to publish static and dynamic content (`htex server`),
