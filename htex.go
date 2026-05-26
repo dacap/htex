@@ -133,7 +133,7 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 		if i < n {
 			token = tokens.tokens[i]
 		} else {
-			token = Token{TokEof, ""}
+			token = Token{TokEof, "", false}
 		}
 	}
 
@@ -143,6 +143,18 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 			return nil
 		}
 		return fmt.Errorf("expected token %v not found, %v found", expected, nextTok())
+	}
+
+	parsePath := func() string {
+		var result string
+		for token.kind != TokElemEnd {
+			result += token.text
+			if token.separated {
+				result += " "
+			}
+			advance()
+		}
+		return result
 	}
 
 	hf := &HtexFile{fn: fn}
@@ -157,13 +169,10 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 		case TokElemBegin:
 			t := strings.ToLower(token.text[2:])
 
-			if strings.HasPrefix(t, "layout") {
-				err := expectTok(TokText)
-				if err != nil {
-					return hf, err
-				}
-
-				layoutFn := h.solveUrlPathToLocalPath(fn, token.text)
+			if t == "layout" {
+				advance()
+				layoutFn := parsePath()
+				layoutFn = h.solveUrlPathToLocalPath(fn, layoutFn)
 				elem = Elem{ElemLayout, layoutFn, nil}
 			} else if t == "content" {
 				elem = Elem{ElemContent, "", nil}
@@ -211,17 +220,8 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 				}
 				elem = Elem{ElemQuery, key, nil}
 			} else if t == "exec" {
-				err := expectTok(TokText)
-				if err != nil {
-					return hf, err
-				}
-				command := token.text
 				advance()
-				for token.kind == TokText {
-					value := token.text
-					command += " " + value
-					advance()
-				}
+				command := parsePath()
 				elem = Elem{ElemExec, command, nil}
 			} else if t == "method" {
 				var methodName string
@@ -242,28 +242,16 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 				}
 				elem = Elem{ElemMethod, methodName, values}
 			} else if t == "include-raw" {
-				err := expectTok(TokText)
-				if err != nil {
-					return hf, err
-				}
-
-				includeFn := token.text
+				advance()
+				includeFn := parsePath()
 				elem = Elem{ElemIncludeRaw, includeFn, nil}
 			} else if t == "include-escaped" {
-				err := expectTok(TokText)
-				if err != nil {
-					return hf, err
-				}
-
-				includeFn := token.text
+				advance()
+				includeFn := parsePath()
 				elem = Elem{ElemIncludeEscaped, includeFn, nil}
 			} else if t == "include-markdown" {
-				err := expectTok(TokText)
-				if err != nil {
-					return hf, err
-				}
-
-				includeFn := token.text
+				advance()
+				includeFn := parsePath()
 				elem = Elem{ElemIncludeMarkdown, includeFn, nil}
 			} else {
 				log.Println("invalid htex element", t)

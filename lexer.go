@@ -26,8 +26,9 @@ const (
 )
 
 type Token struct {
-	kind Tok
-	text string
+	kind      Tok
+	text      string
+	separated bool
 }
 
 type Tokens struct {
@@ -35,7 +36,8 @@ type Tokens struct {
 }
 
 type Lexer struct {
-	KeepComments bool
+	KeepComments    bool
+	whitespaceFound bool
 }
 
 func isSpace(c byte) bool {
@@ -47,6 +49,7 @@ func splitTokens(l *Lexer) func([]byte, bool) (int, []byte, error) {
 	insideComment := false
 	closingElem := false
 	params := 0
+	l.whitespaceFound = false
 	return func(data []byte, atEOF bool) (int, []byte, error) {
 		if closingElem {
 			closingElem = false
@@ -55,6 +58,7 @@ func splitTokens(l *Lexer) func([]byte, bool) (int, []byte, error) {
 		for i := 0; i < len(data); i++ {
 			if insideElem {
 				if isSpace(data[i]) {
+					l.whitespaceFound = true
 					var j = i
 					for i++; i < len(data) && isSpace(data[i]); i++ {
 					}
@@ -197,26 +201,27 @@ func (l *Lexer) lexScanner(fn string, scanner *bufio.Scanner) (*Tokens, error) {
 			nextToken = true
 		}
 
-		token := Token{TokNone, ""}
+		token := Token{TokNone, "", false}
 
 		T = scanner.Text()
 		if len(T) > 2 && T[0] == '<' && T[1] == '!' {
 			t := strings.ToLower(T)
 			if strings.HasPrefix(t, "<!doctype") {
-				token = Token{TokText, T}
+				token = Token{TokText, T, false}
 			} else if strings.HasPrefix(t, "<!--") {
 				if l.KeepComments {
-					token = Token{TokText, T}
+					token = Token{TokText, T, false}
 				} else {
 					// Ignore the whole comment token (which includes "<!-- ... -->")
 				}
 			} else {
 				insideElem = true
 
-				token := Token{TokElemBegin, T}
+				token := Token{TokElemBegin, T, false}
 				tokens.tokens = append(tokens.tokens, token)
 
 				params := 0
+				l.whitespaceFound = false
 				for scanner.Scan() {
 					if params == 0 && scanner.Text() == ">" {
 						nextToken = false
@@ -229,28 +234,29 @@ func (l *Lexer) lexScanner(fn string, scanner *bufio.Scanner) (*Tokens, error) {
 						text == "<=" || text == ">=" ||
 						text == "<" || text == ">" || text == "=" ||
 						text == "+" || text == "-" || text == "*" || text == "/" {
-						token = Token{TokOp, text}
+						token = Token{TokOp, text, l.whitespaceFound}
 					} else if text == "(" {
-						token = Token{TokPOpen, text}
+						token = Token{TokPOpen, text, l.whitespaceFound}
 						params++
 					} else if text == ")" {
-						token = Token{TokPClose, text}
+						token = Token{TokPClose, text, l.whitespaceFound}
 						params--
 					} else {
-						token = Token{TokText, text}
+						token = Token{TokText, text, l.whitespaceFound}
 					}
 					tokens.tokens = append(tokens.tokens, token)
+					l.whitespaceFound = false
 				}
 			}
 		} else if insideElem {
 			if T == ">" {
 				insideElem = false
-				token = Token{TokElemEnd, T}
+				token = Token{TokElemEnd, T, false}
 			} else {
 				panic("token '>' not found")
 			}
 		} else if T != "" {
-			token = Token{TokText, T}
+			token = Token{TokText, T, false}
 		}
 		if token.kind != TokNone {
 			tokens.tokens = append(tokens.tokens, token)

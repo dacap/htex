@@ -296,28 +296,28 @@ func TestLayouts(t *testing.T) {
 		// Single layout
 		{
 			"GET /",
-			"<!layout htmlwrap>hi",
+			"<!layout layouts/htmlwrap>hi",
 			"<html>hi</html>",
 			[]ElemKind{ElemLayout, ElemText},
 		},
 		// Double-layout
 		{
 			"GET /",
-			"<!layout bodywrap>hi",
+			"<!layout layouts/bodywrap>hi",
 			"<html><body>hi</body></html>",
 			[]ElemKind{ElemLayout, ElemText},
 		},
 		// <!layout> for GET method but POST without layout
 		{
 			"GET /",
-			"<!method get><!layout htmlwrap>from get" +
+			"<!method get><!layout layouts/htmlwrap>from get" +
 				"<!method post>from post",
 			"<html>from get</html>",
 			[]ElemKind{ElemMethod, ElemLayout, ElemText, ElemMethod, ElemText},
 		},
 		{
 			"POST /",
-			"<!method get><!layout htmlwrap>from get" +
+			"<!method get><!layout layouts/htmlwrap>from get" +
 				"<!method post>from post",
 			"from post",
 			[]ElemKind{ElemMethod, ElemLayout, ElemText, ElemMethod, ElemText},
@@ -325,16 +325,16 @@ func TestLayouts(t *testing.T) {
 		// Default <!layout> and GET method overwrites the layout
 		{
 			"GET /",
-			"<!layout htmlwrap>" +
-				"<!method get><!layout bodywrap>from get" +
+			"<!layout layouts/htmlwrap>" +
+				"<!method get><!layout layouts/bodywrap>from get" +
 				"<!method post>from post",
 			"<html><body>from get</body></html>",
 			[]ElemKind{ElemLayout, ElemMethod, ElemLayout, ElemText, ElemMethod, ElemText},
 		},
 		{
 			"POST /",
-			"<!layout htmlwrap>" +
-				"<!method get><!layout bodywrap>from get" +
+			"<!layout layouts/htmlwrap>" +
+				"<!method get><!layout layouts/bodywrap>from get" +
 				"<!method post>from post",
 			"<html>from post</html>",
 			[]ElemKind{ElemLayout, ElemMethod, ElemLayout, ElemText, ElemMethod, ElemText},
@@ -342,9 +342,9 @@ func TestLayouts(t *testing.T) {
 	}
 	h := NewHtex(".", false)
 	h.LayoutResolver = func(layoutFn string) *bufio.Scanner {
-		if layoutFn == "htmlwrap" {
+		if layoutFn == "layouts/htmlwrap" {
 			return bufio.NewScanner(strings.NewReader("<html><!content></html>"))
-		} else if layoutFn == "bodywrap" {
+		} else if layoutFn == "layouts/bodywrap" {
 			return bufio.NewScanner(strings.NewReader("<!layout htmlwrap><body><!content></body>"))
 		} else {
 			return nil
