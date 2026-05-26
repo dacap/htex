@@ -15,11 +15,14 @@ import (
 type Tok int
 
 const (
-	TokEof Tok = iota
+	TokEof Tok = iota - 1
 	TokNone
 	TokText      // Regular HTML text to print
 	TokElemBegin // <!element ...
 	TokElemEnd   // ... >
+	TokOp
+	TokPOpen  // '('
+	TokPClose // ')'
 )
 
 type Token struct {
@@ -35,10 +38,15 @@ type Lexer struct {
 	KeepComments bool
 }
 
+func isSpace(c byte) bool {
+	return (c == ' ' || c == '\t' || c == '\r' || c == '\n')
+}
+
 func splitTokens(l *Lexer) func([]byte, bool) (int, []byte, error) {
 	insideElem := false
 	insideComment := false
 	closingElem := false
+	params := 0
 	return func(data []byte, atEOF bool) (int, []byte, error) {
 		if closingElem {
 			closingElem = false
@@ -46,18 +54,60 @@ func splitTokens(l *Lexer) func([]byte, bool) (int, []byte, error) {
 		}
 		for i := 0; i < len(data); i++ {
 			if insideElem {
-				if data[i] == ' ' || data[i] == '\r' || data[i] == '\n' {
+				if isSpace(data[i]) {
 					var j = i
-					for ; i < len(data) &&
-						(data[i] == ' ' ||
-							data[i] == '\r' ||
-							data[i] == '\n'); i++ {
+					for i++; i < len(data) && isSpace(data[i]); i++ {
 					}
-					return i, data[:j], nil
-				} else if data[i] == '>' {
+					if j == 0 {
+						return i, nil, nil // Only empty text
+					} else {
+						return i, data[:j], nil
+					}
+				} else if params == 0 && data[i] == '>' {
+					if i > 0 {
+						return i, data[:i], nil
+					}
 					insideElem = false
-					closingElem = true
-					return i, data[:i], nil
+					closingElem = false
+					return 1, data[0:1], nil
+				} else if data[i] == '(' {
+					if i > 0 {
+						return i, data[:i], nil
+					}
+					params++
+					return 1, data[0:1], nil
+				} else if data[i] == ')' {
+					if i > 0 {
+						return i, data[:i], nil
+					}
+					params--
+					return 1, data[0:1], nil
+				} else if i+1 < len(data) && data[i+1] == '=' {
+					if i > 0 {
+						return i, data[:i], nil
+					}
+					// Operators: ==, !=, <=, >=
+					if data[i] == '=' ||
+						data[i] == '!' ||
+						data[i] == '<' ||
+						data[i] == '>' {
+						return i + 2, data[:i+2], nil
+					}
+				} else if params > 0 &&
+					(data[i] == '<' || data[i] == '>') {
+					if i > 0 {
+						return i, data[:i], nil
+					}
+					return 1, data[0:1], nil
+				} else if data[i] == '=' ||
+					data[i] == '+' ||
+					data[i] == '-' ||
+					data[i] == '*' ||
+					data[i] == '/' {
+					if i > 0 {
+						return i, data[:i], nil
+					}
+					return 1, data[0:1], nil
 				}
 			} else if insideComment {
 				// Here l.KeepComments is always false, as if we keep
@@ -98,7 +148,7 @@ func splitTokens(l *Lexer) func([]byte, bool) (int, []byte, error) {
 					var j int
 					k := len(data)
 					for j = 0; j < len(data); j++ {
-						if data[j] == ' ' {
+						if isSpace(data[j]) {
 							k = j + 1
 							break
 						} else if data[j] == '>' {
@@ -166,14 +216,29 @@ func (l *Lexer) lexScanner(fn string, scanner *bufio.Scanner) (*Tokens, error) {
 				token := Token{TokElemBegin, T}
 				tokens.tokens = append(tokens.tokens, token)
 
+				params := 0
 				for scanner.Scan() {
-					if scanner.Text() == ">" {
+					if params == 0 && scanner.Text() == ">" {
 						nextToken = false
 						break
 					}
 
 					text := scanner.Text()
-					token := Token{TokText, text}
+					var token Token
+					if text == "==" || text == "!=" ||
+						text == "<=" || text == ">=" ||
+						text == "<" || text == ">" || text == "=" ||
+						text == "+" || text == "-" || text == "*" || text == "/" {
+						token = Token{TokOp, text}
+					} else if text == "(" {
+						token = Token{TokPOpen, text}
+						params++
+					} else if text == ")" {
+						token = Token{TokPClose, text}
+						params--
+					} else {
+						token = Token{TokText, text}
+					}
 					tokens.tokens = append(tokens.tokens, token)
 				}
 			}

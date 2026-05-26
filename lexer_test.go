@@ -178,3 +178,43 @@ func TestLexerElem(t *testing.T) {
 	l := NewLexer()
 	testLexer(l, t, tests)
 }
+
+func TestLexerIf(t *testing.T) {
+	tests := []LexerTest{
+		{
+			"<!if a == b>c<!end>",
+			[]Tok{TokElemBegin, TokText, TokOp, TokText, TokElemEnd, TokText, TokElemBegin, TokElemEnd},
+			[]string{"<!if", "a", "==", "b", ">", "c", "<!end", ">"},
+		},
+		{
+			"<!if a==b>c<!end>",
+			[]Tok{TokElemBegin, TokText, TokOp, TokText, TokElemEnd, TokText, TokElemBegin, TokElemEnd},
+			[]string{"<!if", "a", "==", "b", ">", "c", "<!end", ">"},
+		},
+		{
+			"<!if (a < b)>c<!end>",
+			[]Tok{TokElemBegin, TokPOpen, TokText, TokOp, TokText, TokPClose, TokElemEnd,
+				TokText, TokElemBegin, TokElemEnd},
+			[]string{"<!if", "(", "a", "<", "b", ")", ">", "c", "<!end", ">"},
+		},
+		{
+			"<!if (a<b)>c<!end>",
+			[]Tok{TokElemBegin, TokPOpen, TokText, TokOp, TokText, TokPClose, TokElemEnd,
+				TokText, TokElemBegin, TokElemEnd},
+			[]string{"<!if", "(", "a", "<", "b", ")", ">", "c", "<!end", ">"},
+		},
+		{
+			"<!if a > b>c<!end>",
+			[]Tok{TokElemBegin, TokText, TokElemEnd, TokText, TokElemBegin, TokElemEnd},
+			[]string{"<!if", "a", ">", " b>c", "<!end", ">"},
+		},
+		{
+			"<!if (a>b)>c<!end>",
+			[]Tok{TokElemBegin, TokPOpen, TokText, TokOp, TokText, TokPClose, TokElemEnd,
+				TokText, TokElemBegin, TokElemEnd},
+			[]string{"<!if", "(", "a", ">", "b", ")", ">", "c", "<!end", ">"},
+		},
+	}
+	l := NewLexer()
+	testLexer(l, t, tests)
+}
