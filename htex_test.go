@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 )
@@ -342,9 +343,10 @@ func TestLayouts(t *testing.T) {
 	}
 	h := NewHtex(".", false)
 	h.LayoutResolver = func(layoutFn string) *bufio.Scanner {
-		if layoutFn == "layouts/htmlwrap" {
+		sep := string(os.PathSeparator)
+		if layoutFn == "layouts"+sep+"htmlwrap" {
 			return bufio.NewScanner(strings.NewReader("<html><!content></html>"))
-		} else if layoutFn == "layouts/bodywrap" {
+		} else if layoutFn == "layouts"+sep+"bodywrap" {
 			return bufio.NewScanner(strings.NewReader("<!layout htmlwrap><body><!content></body>"))
 		} else {
 			return nil
