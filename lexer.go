@@ -44,6 +44,12 @@ func isSpace(c byte) bool {
 	return (c == ' ' || c == '\t' || c == '\r' || c == '\n')
 }
 
+func isAlphaNum(c byte) bool {
+	return (c >= 'a' && c <= 'z') ||
+		(c >= 'A' && c <= 'Z') ||
+		(c >= '0' && c <= '9')
+}
+
 func splitTokens(l *Lexer) func([]byte, bool) (int, []byte, error) {
 	insideElem := false
 	insideComment := false
@@ -151,12 +157,15 @@ func splitTokens(l *Lexer) func([]byte, bool) (int, []byte, error) {
 					}
 					var j int
 					k := len(data)
-					for j = 0; j < len(data); j++ {
-						if isSpace(data[j]) {
+					for j = 2; j < len(data); j++ {
+						if data[j] == '>' {
+							closingElem = true
+							k = j
+							break
+						} else if isSpace(data[j]) {
 							k = j + 1
 							break
-						} else if data[j] == '>' {
-							closingElem = true
+						} else if !isAlphaNum(data[j]) {
 							k = j
 							break
 						}

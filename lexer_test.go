@@ -218,3 +218,25 @@ func TestLexerIf(t *testing.T) {
 	l := NewLexer()
 	testLexer(l, t, tests)
 }
+
+func TestLexerExpr(t *testing.T) {
+	tests := []LexerTest{
+		{
+			"<!a>",
+			[]Tok{TokElemBegin, TokElemEnd},
+			[]string{"<!a", ">"},
+		},
+		{
+			"<!a=b>",
+			[]Tok{TokElemBegin, TokOp, TokText, TokElemEnd},
+			[]string{"<!a", "=", "b", ">"},
+		},
+		{
+			"<!a = (b+c)*2>",
+			[]Tok{TokElemBegin, TokOp, TokPOpen, TokText, TokOp, TokText, TokPClose, TokOp, TokText, TokElemEnd},
+			[]string{"<!a", "=", "(", "b", "+", "c", ")", "*", "2", ">"},
+		},
+	}
+	l := NewLexer()
+	testLexer(l, t, tests)
+}
