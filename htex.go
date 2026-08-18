@@ -117,156 +117,127 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 		return nil, err
 	}
 
-	i := -1
-	n := len(tokens.tokens)
-	var token Token
-
-	nextTok := func() Tok {
-		if i+1 < n {
-			return tokens.tokens[i+1].kind
-		}
-		return TokEof
-	}
-
-	advance := func() {
-		i++
-		if i < n {
-			token = tokens.tokens[i]
-		} else {
-			token = Token{TokEof, "", false}
-		}
-	}
-
-	expectTok := func(expected Tok) error {
-		if nextTok() == expected {
-			advance()
-			return nil
-		}
-		return fmt.Errorf("expected token %v not found, %v found", expected, nextTok())
-	}
+	ti := newTokensIter(tokens)
 
 	parsePath := func() string {
 		var result string
-		for token.kind != TokElemEnd {
-			result += token.text
-			if token.separated {
+		for ti.token.kind != TokElemEnd {
+			result += ti.token.text
+			if ti.token.separated {
 				result += " "
 			}
-			advance()
+			ti.advance()
 		}
 		return result
 	}
 
 	hf := &HtexFile{fn: fn}
-	advance()
-	for i < n {
+	for ti.advance() {
 		elem := Elem{ElemNone, "", nil}
 
-		switch token.kind {
+		switch ti.token.kind {
 		case TokText:
-			elem = Elem{ElemText, token.text, nil}
+			elem = Elem{ElemText, ti.token.text, nil}
 			break
 		case TokElemBegin:
-			t := strings.ToLower(token.text[2:])
+			t := strings.ToLower(ti.token.text[2:])
 
 			if t == "layout" {
-				advance()
+				ti.advance()
 				layoutFn := parsePath()
 				layoutFn = h.solveUrlPathToLocalPath(fn, layoutFn)
 				elem = Elem{ElemLayout, layoutFn, nil}
 			} else if t == "content" {
 				elem = Elem{ElemContent, "", nil}
 			} else if t == "get" {
-				err := expectTok(TokText)
+				err := ti.expectTok(TokText)
 				if err != nil {
 					return hf, err
 				}
 
-				varName := token.text
+				varName := ti.token.text
 				elem = Elem{ElemGet, varName, nil}
 			} else if t == "set" {
-				err := expectTok(TokText)
+				err := ti.expectTok(TokText)
 				if err != nil {
 					return hf, err
 				}
 
-				varName := token.text
+				varName := ti.token.text
 				var values *url.Values = nil
-				advance()
-				for token.kind == TokText {
-					value := token.text
+				ti.advance()
+				for ti.token.kind == TokText {
+					value := ti.token.text
 					if values == nil {
 						values = &url.Values{}
 					}
 					values.Add(varName, value)
-					advance()
+					ti.advance()
 				}
 				elem = Elem{ElemSet, varName, values}
 			} else if t == "url" {
 				elem = Elem{ElemUrl, "", nil}
 			} else if t == "data" {
-				err := expectTok(TokText)
+				err := ti.expectTok(TokText)
 				if err != nil {
 					return hf, err
 				}
 
-				paramName := token.text
+				paramName := ti.token.text
 				elem = Elem{ElemData, paramName, nil}
 			} else if t == "query" {
 				var key string
-				if nextTok() == TokText {
-					advance()
-					key = token.text
+				if ti.nextTok() == TokText {
+					ti.advance()
+					key = ti.token.text
 				}
 				elem = Elem{ElemQuery, key, nil}
 			} else if t == "exec" {
-				advance()
+				ti.advance()
 				command := parsePath()
 				elem = Elem{ElemExec, command, nil}
 			} else if t == "method" {
 				var methodName string
 				var values *url.Values = nil
-				if nextTok() == TokText {
-					advance()
-					methodName = strings.ToLower(token.text)
-					advance()
-					for token.kind == TokText {
-						nameAndValue := token.text
+				if ti.nextTok() == TokText {
+					ti.advance()
+					methodName = strings.ToLower(ti.token.text)
+					ti.advance()
+					for ti.token.kind == TokText {
+						nameAndValue := ti.token.text
 						name, value, _ := strings.Cut(nameAndValue, "=")
 						if values == nil {
 							values = &url.Values{}
 						}
 						values.Add(name, value)
-						advance()
+						ti.advance()
 					}
 				}
 				elem = Elem{ElemMethod, methodName, values}
 			} else if t == "include-raw" {
-				advance()
+				ti.advance()
 				includeFn := parsePath()
 				elem = Elem{ElemIncludeRaw, includeFn, nil}
 			} else if t == "include-escaped" {
-				advance()
+				ti.advance()
 				includeFn := parsePath()
 				elem = Elem{ElemIncludeEscaped, includeFn, nil}
 			} else if t == "include-markdown" {
-				advance()
+				ti.advance()
 				includeFn := parsePath()
 				elem = Elem{ElemIncludeMarkdown, includeFn, nil}
 			} else {
 				log.Println("invalid htex element", t)
 			}
 
-			for token.kind != TokElemEnd {
-				advance()
+			for ti.token.kind != TokElemEnd {
+				ti.advance()
 			}
 		}
 
 		if elem.kind != ElemNone {
 			hf.elems = append(hf.elems, elem)
 		}
-
-		advance()
 	}
 	return hf, nil
 }

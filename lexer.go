@@ -7,6 +7,7 @@ package htex
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -34,6 +35,55 @@ type Token struct {
 type Tokens struct {
 	tokens []Token
 }
+
+//////////////////////////////////////////////////////////////////////
+// TokensIter
+
+type TokensIter struct {
+	tokens *Tokens
+	token  Token
+	i      int
+	n      int
+}
+
+func (ti *TokensIter) nextTok() Tok {
+	if ti.i+1 < ti.n {
+		return ti.tokens.tokens[ti.i+1].kind
+	}
+	return TokEof
+}
+
+func (ti *TokensIter) advance() bool {
+	ti.i++
+	if ti.i < ti.n {
+		ti.token = ti.tokens.tokens[ti.i]
+		return true
+	} else {
+		ti.token = Token{TokEof, "", false}
+		return false
+	}
+}
+
+func (ti *TokensIter) expectTok(expected Tok) error {
+	if ti.nextTok() == expected {
+		ti.advance()
+		return nil
+	}
+	return fmt.Errorf("expected token %v not found, %v found", expected, ti.nextTok())
+}
+
+func newTokensIter(tokens *Tokens) *TokensIter {
+	ti := &TokensIter{
+		tokens,
+		Token{},
+		-1,
+		len(tokens.tokens),
+	}
+	return ti
+}
+
+//////////////////////////////////////////////////////////////////////
+// Lexer
 
 type Lexer struct {
 	KeepComments    bool
