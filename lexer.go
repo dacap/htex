@@ -97,7 +97,8 @@ func isSpace(c byte) bool {
 func isAlphaNum(c byte) bool {
 	return (c >= 'a' && c <= 'z') ||
 		(c >= 'A' && c <= 'Z') ||
-		(c >= '0' && c <= '9')
+		(c >= '0' && c <= '9') ||
+		(c == '_') || (c == '-')
 }
 
 func splitTokens(l *Lexer) func([]byte, bool) (int, []byte, error) {
