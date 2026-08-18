@@ -354,3 +354,70 @@ func TestLayouts(t *testing.T) {
 	}
 	testParsing(h, t, tests)
 }
+
+func TestIfs(t *testing.T) {
+	tests := []ParseTest{
+		{
+			"GET /",
+			"a<!if false>b<!end>c",
+			"ac",
+			[]ElemKind{ElemText, ElemIf, ElemText, ElemEnd, ElemText},
+		},
+		{
+			"GET /",
+			"a<!if true>b<!end>c",
+			"abc",
+			[]ElemKind{ElemText, ElemIf, ElemText, ElemEnd, ElemText},
+		},
+		{
+			"GET /",
+			"a<!if false>b<!else>c<!end>d",
+			"acd",
+			[]ElemKind{ElemText, ElemIf, ElemText, ElemElse, ElemText, ElemEnd, ElemText},
+		},
+		{
+			"GET /",
+			"a<!if true>b<!else>c<!end>d",
+			"abd",
+			[]ElemKind{ElemText, ElemIf, ElemText, ElemElse, ElemText, ElemEnd, ElemText},
+		},
+		{
+			"GET /",
+			"a<!if false>b<!elseif true>c<!end>d",
+			"acd",
+			[]ElemKind{ElemText, ElemIf, ElemText, ElemElseIf, ElemText, ElemEnd, ElemText},
+		},
+		{
+			"GET /",
+			"a<!if false>b<!elseif false>c<!end>d",
+			"ad",
+			[]ElemKind{ElemText, ElemIf, ElemText, ElemElseIf, ElemText, ElemEnd, ElemText},
+		},
+		{
+			"GET /",
+			"a<!if false>b<!elseif false>c<!else>d<!end>e",
+			"ade",
+			[]ElemKind{ElemText, ElemIf, ElemText, ElemElseIf, ElemText, ElemElse, ElemText, ElemEnd, ElemText},
+		},
+		{
+			"GET /",
+			"a<!if false>b<!if true>c<!end>d<!end>e",
+			"ae",
+			[]ElemKind{ElemText, ElemIf, ElemText, ElemIf, ElemText, ElemEnd, ElemText, ElemEnd, ElemText},
+		},
+		{
+			"GET /",
+			"a<!if true>b<!if false>c<!end>d<!end>e",
+			"abde",
+			[]ElemKind{ElemText, ElemIf, ElemText, ElemIf, ElemText, ElemEnd, ElemText, ElemEnd, ElemText},
+		},
+		{
+			"GET /",
+			"a<!if true>b<!if true>c<!end>d<!end>e",
+			"abcde",
+			[]ElemKind{ElemText, ElemIf, ElemText, ElemIf, ElemText, ElemEnd, ElemText, ElemEnd, ElemText},
+		},
+	}
+	h := NewHtex(".", false)
+	testParsing(h, t, tests)
+}

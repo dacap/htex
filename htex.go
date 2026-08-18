@@ -39,12 +39,22 @@ const (
 	ElemIncludeRaw
 	ElemIncludeEscaped
 	ElemIncludeMarkdown
+	ElemIf
+	ElemElseIf
+	ElemElse
+	ElemEnd
 )
 
 type Elem struct {
-	kind   ElemKind
-	text   string
-	values *url.Values
+	kind    ElemKind
+	text    string
+	values  *url.Values
+	jump    int
+	jumpEnd int
+}
+
+func newElem(kind ElemKind, text string) Elem {
+	return Elem{kind, text, nil, 0, 0}
 }
 
 type HtexFile struct {
@@ -117,7 +127,15 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 		return nil, err
 	}
 
+	// Auxiliary structure to keep track of the current level of
+	// <!if><!elseif><!else><!end> elements to update their
+	// jump/jumpEnd fields.
+	type Ifs struct {
+		idxs []int
+	}
+
 	ti := newTokensIter(tokens)
+	var ifs []Ifs
 
 	parsePath := func() string {
 		var result string
@@ -132,12 +150,13 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 	}
 
 	hf := &HtexFile{fn: fn}
+	lastMethod := -1
 	for ti.advance() {
-		elem := Elem{ElemNone, "", nil}
+		elem := newElem(ElemNone, "")
 
 		switch ti.token.kind {
 		case TokText:
-			elem = Elem{ElemText, ti.token.text, nil}
+			elem = newElem(ElemText, ti.token.text)
 			break
 		case TokElemBegin:
 			t := strings.ToLower(ti.token.text[2:])
@@ -146,9 +165,9 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 				ti.advance()
 				layoutFn := parsePath()
 				layoutFn = h.solveUrlPathToLocalPath(fn, layoutFn)
-				elem = Elem{ElemLayout, layoutFn, nil}
+				elem = newElem(ElemLayout, layoutFn)
 			} else if t == "content" {
-				elem = Elem{ElemContent, "", nil}
+				elem = newElem(ElemContent, "")
 			} else if t == "get" {
 				err := ti.expectTok(TokText)
 				if err != nil {
@@ -156,7 +175,7 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 				}
 
 				varName := ti.token.text
-				elem = Elem{ElemGet, varName, nil}
+				elem = newElem(ElemGet, varName)
 			} else if t == "set" {
 				err := ti.expectTok(TokText)
 				if err != nil {
@@ -174,9 +193,10 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 					values.Add(varName, value)
 					ti.advance()
 				}
-				elem = Elem{ElemSet, varName, values}
+				elem = newElem(ElemSet, varName)
+				elem.values = values
 			} else if t == "url" {
-				elem = Elem{ElemUrl, "", nil}
+				elem = newElem(ElemUrl, "")
 			} else if t == "data" {
 				err := ti.expectTok(TokText)
 				if err != nil {
@@ -184,18 +204,18 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 				}
 
 				paramName := ti.token.text
-				elem = Elem{ElemData, paramName, nil}
+				elem = newElem(ElemData, paramName)
 			} else if t == "query" {
 				var key string
 				if ti.nextTok() == TokText {
 					ti.advance()
 					key = ti.token.text
 				}
-				elem = Elem{ElemQuery, key, nil}
+				elem = newElem(ElemQuery, key)
 			} else if t == "exec" {
 				ti.advance()
 				command := parsePath()
-				elem = Elem{ElemExec, command, nil}
+				elem = newElem(ElemExec, command)
 			} else if t == "method" {
 				var methodName string
 				var values *url.Values = nil
@@ -213,19 +233,59 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 						ti.advance()
 					}
 				}
-				elem = Elem{ElemMethod, methodName, values}
+				elem = newElem(ElemMethod, methodName)
+				elem.values = values
+				if lastMethod >= 0 {
+					hf.elems[lastMethod].jump = len(hf.elems)
+				}
+				lastMethod = len(hf.elems)
 			} else if t == "include-raw" {
 				ti.advance()
 				includeFn := parsePath()
-				elem = Elem{ElemIncludeRaw, includeFn, nil}
+				elem = newElem(ElemIncludeRaw, includeFn)
 			} else if t == "include-escaped" {
 				ti.advance()
 				includeFn := parsePath()
-				elem = Elem{ElemIncludeEscaped, includeFn, nil}
+				elem = newElem(ElemIncludeEscaped, includeFn)
 			} else if t == "include-markdown" {
 				ti.advance()
 				includeFn := parsePath()
-				elem = Elem{ElemIncludeMarkdown, includeFn, nil}
+				elem = newElem(ElemIncludeMarkdown, includeFn)
+			} else if t == "if" {
+				ti.advance()
+				elem = newElem(ElemIf, ti.token.text)
+				ifs = append(ifs, Ifs{[]int{len(hf.elems)}})
+			} else if t == "elseif" {
+				n := len(ifs)
+				if n == 0 {
+					return nil, fmt.Errorf("unexpected element <!elseif> without <!if>")
+				}
+				hf.elems[ifs[n-1].idxs[len(ifs[n-1].idxs)-1]].jump = len(hf.elems)
+				ifs[n-1].idxs = append(ifs[n-1].idxs, len(hf.elems))
+
+				ti.advance()
+				elem = newElem(ElemElseIf, ti.token.text)
+			} else if t == "else" {
+				n := len(ifs)
+				if n == 0 {
+					return nil, fmt.Errorf("unexpected element <!else> without <!if>")
+				}
+				hf.elems[ifs[n-1].idxs[len(ifs[n-1].idxs)-1]].jump = len(hf.elems)
+				ifs[n-1].idxs = append(ifs[n-1].idxs, len(hf.elems))
+
+				elem = newElem(ElemElse, "")
+			} else if t == "end" {
+				n := len(ifs)
+				if n == 0 {
+					return nil, fmt.Errorf("unexpected element <!end> without <!if>")
+				}
+				endIdx := len(hf.elems)
+				for j := 0; j < len(ifs[n-1].idxs); j++ {
+					hf.elems[ifs[n-1].idxs[j]].jumpEnd = endIdx
+				}
+				ifs = ifs[:n-1]
+
+				elem = newElem(ElemEnd, "")
 			} else {
 				log.Println("invalid htex element", t)
 			}
@@ -238,6 +298,9 @@ func (h *Htex) parseHtexScanner(w http.ResponseWriter, r *http.Request, fn strin
 		if elem.kind != ElemNone {
 			hf.elems = append(hf.elems, elem)
 		}
+	}
+	if lastMethod >= 0 {
+		hf.elems[lastMethod].jump = len(hf.elems)
 	}
 	return hf, nil
 }
@@ -309,19 +372,19 @@ func (h *Htex) writeHtexFile0(w http.ResponseWriter, r *http.Request, hf *HtexFi
 		return
 	}
 
+	var insideIf []bool
 	vars := make(map[string]string)
-	skipUntilNewMethod = false
-	for _, elem := range hf.elems {
+	n := len(hf.elems)
+	for i := 0; i < n; i++ {
+		elem := hf.elems[i]
+
 		if elem.kind == ElemMethod {
 			if ((elem.text == methodName) && (elem.values == nil || matchQuery(elem.values, &query))) ||
 				elem.text == "any" {
-				skipUntilNewMethod = false
+				// Do nothing
 			} else {
-				skipUntilNewMethod = true
-				continue
+				i = elem.jump
 			}
-		} else if skipUntilNewMethod {
-			continue
 		} else if elem.kind == ElemContent {
 			if content != nil {
 				content(w, r)
@@ -385,6 +448,49 @@ func (h *Htex) writeHtexFile0(w http.ResponseWriter, r *http.Request, hf *HtexFi
 			}
 		} else if elem.kind == ElemText {
 			w.Write([]byte(elem.text))
+		} else if elem.kind == ElemIf {
+			// TODO evaluate any kind of expression from "elem"
+			cond := (elem.text == "true")
+			insideIf = append(insideIf, cond)
+
+			if cond {
+				// Continue with elements inside <!if>...<!end>
+			} else if elem.jump > 0 {
+				i = elem.jump - 1
+			} else if elem.jumpEnd > 0 {
+				i = elem.jumpEnd - 1
+			}
+		} else if elem.kind == ElemElseIf {
+			if len(insideIf) == 0 {
+				log.Println("unexpected <!elseif> without <!if>")
+				return
+			}
+			if insideIf[len(insideIf)-1] {
+				// Go to <!end> as we already entered in the first <!if>
+				i = elem.jumpEnd - 1
+			} else {
+				// TODO evaluate any kind of expression from "elem"
+				if elem.text == "true" {
+					insideIf[len(insideIf)-1] = true
+				} else if elem.jump > 0 {
+					i = elem.jump - 1
+				} else if elem.jumpEnd > 0 {
+					i = elem.jumpEnd - 1
+				}
+			}
+		} else if elem.kind == ElemElse {
+			if len(insideIf) == 0 {
+				log.Print("unexpected <!else> without <!if>")
+				return
+			}
+			if insideIf[len(insideIf)-1] {
+				// Go to <!end> as we already entered in the first <!if>
+				i = elem.jumpEnd - 1
+			} else {
+				// Enter in the <!else>...<!end>
+			}
+		} else if elem.kind == ElemEnd {
+			insideIf = insideIf[:len(insideIf)-1]
 		}
 	}
 }
