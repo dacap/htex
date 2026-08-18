@@ -383,7 +383,7 @@ func (h *Htex) writeHtexFile0(w http.ResponseWriter, r *http.Request, hf *HtexFi
 				elem.text == "any" {
 				// Do nothing
 			} else {
-				i = elem.jump
+				i = elem.jump - 1
 			}
 		} else if elem.kind == ElemContent {
 			if content != nil {
